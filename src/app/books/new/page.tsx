@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
-import { analyzeBookForUser } from '@/lib/book-actions'
 import { APIConfigBanner } from '@/components/api-config-banner'
 import type { Category, ReadingMode, BookGenre, AIRecommendation } from '@/types'
 import { READING_MODE_LABELS, BOOK_GENRE_LABELS } from '@/types'
@@ -72,20 +71,45 @@ export default function NewBookPage() {
     setBookOptions([])
 
     try {
-      // Call AI to find matching books by title
-      const result = await analyzeBookForUser(title.trim(), undefined, 'FIND_BOOK_OPTIONS')
+      // Get settings from localStorage
+      const stored = localStorage.getItem('reading-os-settings')
+      if (!stored) {
+        alert('请先在设置中配置 AI API')
+        setIsSearching(false)
+        return
+      }
+      const settings = JSON.parse(stored)
+      if (!settings.apiKey || !settings.apiBaseUrl) {
+        alert('请先在设置中配置 AI API')
+        setIsSearching(false)
+        return
+      }
+
+      // Call our API with settings
+      const response = await fetch('/api/ai', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-ai-api-key': settings.apiKey,
+          'x-ai-base-url': settings.apiBaseUrl,
+          'x-ai-model': settings.aiModel || 'gpt-4o',
+        },
+        body: JSON.stringify({
+          title: title.trim(),
+          mode: 'FIND_BOOK_OPTIONS',
+        }),
+      })
+
+      const result = await response.json()
 
       if (result.success && result.recommendation) {
-        // Debug: show what AI returned
         const suggestion = result.recommendation.reading_suggestion || ''
         const targetAudience = result.recommendation.target_audience || ''
 
-        // Show debug alert so we can see what AI returned
         alert(`AI 返回:\nreading_suggestion: ${suggestion}\ntarget_audience: ${targetAudience}`)
 
         const options: BookOption[] = []
 
-        // Parse "书名：XXX，作者：XXX" format
         const bookMatch = suggestion.match(/书名[：:]\s*(.+?)，?\s*作者[：:]\s*(.+)/)
         if (bookMatch) {
           options.push({
@@ -95,7 +119,6 @@ export default function NewBookPage() {
           })
         }
 
-        // Fallback: if no book info, use target_audience as author hint
         if (options.length === 0 && targetAudience) {
           options.push({
             title: title.trim(),
@@ -104,7 +127,6 @@ export default function NewBookPage() {
           })
         }
 
-        // Final fallback
         if (options.length === 0) {
           options.push({
             title: title.trim(),
@@ -160,15 +182,41 @@ export default function NewBookPage() {
     setIsAnalyzing(true)
     setAiRecommendation(null)
 
-    const result = await analyzeBookForUser(
-      title,
-      author || undefined,
-      mode === 'goal' ? userGoal : undefined
-    )
+    // Get settings from localStorage
+    const stored = localStorage.getItem('reading-os-settings')
+    if (!stored) {
+      alert('请先在设置中配置 AI API')
+      setIsAnalyzing(false)
+      return
+    }
+    const settings = JSON.parse(stored)
+    if (!settings.apiKey || !settings.apiBaseUrl) {
+      alert('请先在设置中配置 AI API')
+      setIsAnalyzing(false)
+      return
+    }
+
+    const response = await fetch('/api/ai', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-ai-api-key': settings.apiKey,
+        'x-ai-base-url': settings.apiBaseUrl,
+        'x-ai-model': settings.aiModel || 'gpt-4o',
+      },
+      body: JSON.stringify({
+        title: title,
+        author: author,
+        mode: mode === 'goal' ? 'goal' : 'direct',
+        userGoal: mode === 'goal' ? userGoal : undefined,
+      }),
+    })
+
+    const result = await response.json()
 
     if (result.success && result.recommendation) {
       setAiRecommendation(result.recommendation)
-      if (result.recommendation.core_questions.length > 0) {
+      if (result.recommendation.core_questions?.length > 0) {
         setCoreQuestions(result.recommendation.core_questions)
       }
       if (result.recommendation.suggested_genre) {
