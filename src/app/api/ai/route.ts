@@ -57,7 +57,6 @@ export async function POST(request: NextRequest) {
     })
 
     let prompt: string
-    const systemPrompt = '你是一位资深阅读顾问，擅长帮助用户找到适合自己的书籍。始终返回有效的 JSON，不要添加任何解释性文字。'
 
     if (mode === 'FIND_BOOK_OPTIONS') {
       prompt = `用户输入了书名："${title}"
@@ -103,14 +102,34 @@ export async function POST(request: NextRequest) {
     const response = await openai.chat.completions.create({
       model: config.model,
       messages: [
-        { role: 'system', content: systemPrompt },
+        { role: 'system', content: '你是一位资深阅读顾问。非常重要：你只能返回纯JSON格式，不要在JSON前后添加任何其他内容，不要使用思考标签，不要使用markdown格式。输出格式：{"core_questions":[],"suggested_genre":"...","reading_suggestion":"...","target_audience":"..."}' },
         { role: 'user', content: prompt },
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.7,
+      temperature: 0.3,
     })
 
-    const content = response.choices[0].message.content || '{}'
+    let content = response.choices[0].message.content || '{}'
+
+    // Remove any thinking tags or markdown that AI might have added
+    content = content.replace(/<think>[\s\S]*?<\/think>/gi, '')
+    content = content.replace(/```json\s*/gi, '')
+    content = content.replace(/```\s*/gi, '')
+    content = content.trim()
+
+    // Make sure content is valid JSON
+    try {
+      JSON.parse(content) // Just to verify
+    } catch {
+      // If not valid JSON, try to extract JSON from the content
+      const jsonMatch = content.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        content = jsonMatch[0]
+      } else {
+        throw new Error('AI 返回的不是有效的 JSON')
+      }
+    }
+
     const result = JSON.parse(content)
 
     return NextResponse.json({
