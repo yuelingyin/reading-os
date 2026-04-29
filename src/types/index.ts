@@ -28,6 +28,9 @@ export interface DailyPlan {
 export interface Profile {
   id: string
   openai_api_key: string | null
+  ai_provider: string | null
+  ai_base_url: string | null
+  ai_model: string | null
   created_at: string
 }
 

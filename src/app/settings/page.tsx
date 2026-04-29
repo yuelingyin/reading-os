@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Key, Eye, EyeOff, Save } from 'lucide-react'
+import { ArrowLeft, Key, Eye, EyeOff, Save, Globe } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -11,10 +11,26 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { createClient } from '@/lib/supabase/client'
 
+const AI_PROVIDERS = [
+  { id: 'openai', name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', defaultModel: 'gpt-4o' },
+  { id: 'azure', name: 'Azure OpenAI', baseUrl: '', defaultModel: 'gpt-4o' },
+  { id: 'custom', name: '自定义 (OpenAI 兼容)', baseUrl: '', defaultModel: 'gpt-4o' },
+]
+
+const MODELS = [
+  { id: 'gpt-4o', name: 'GPT-4o' },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
+  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo' },
+  { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
+]
+
 export default function SettingsPage() {
   const router = useRouter()
   const [userId, setUserId] = useState<string | null>(null)
+  const [apiProvider, setApiProvider] = useState<string>('openai')
+  const [apiBaseUrl, setApiBaseUrl] = useState<string>('https://api.openai.com/v1')
   const [apiKey, setApiKey] = useState('')
+  const [aiModel, setAiModel] = useState<string>('gpt-4o')
   const [showKey, setShowKey] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -25,12 +41,25 @@ export default function SettingsPage() {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) { router.push('/login'); return }
       setUserId(user.id)
-      // Load existing API key
-      supabase.from('profiles').select('openai_api_key').eq('id', user.id).single().then(({ data }) => {
-        if (data?.openai_api_key) setApiKey(data.openai_api_key)
+      // Load existing settings
+      supabase.from('profiles').select('*').eq('id', user.id).single().then(({ data }) => {
+        if (data) {
+          if (data.ai_provider) setApiProvider(data.ai_provider)
+          if (data.ai_base_url) setApiBaseUrl(data.ai_base_url)
+          if (data.openai_api_key) setApiKey(data.openai_api_key)
+          if (data.ai_model) setAiModel(data.ai_model)
+        }
       })
     })
   }, [router])
+
+  const handleProviderChange = (provider: string) => {
+    setApiProvider(provider)
+    const preset = AI_PROVIDERS.find(p => p.id === provider)
+    if (preset && preset.baseUrl) {
+      setApiBaseUrl(preset.baseUrl)
+    }
+  }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -40,13 +69,16 @@ export default function SettingsPage() {
     const supabase = createClient()
     const { error } = await supabase.from('profiles').upsert({
       id: userId,
+      ai_provider: apiProvider,
+      ai_base_url: apiBaseUrl.trim() || null,
       openai_api_key: apiKey.trim() || null,
+      ai_model: aiModel,
     })
     setIsSaving(false)
     if (error) {
       setMessage({ type: 'error', text: '保存失败：' + error.message })
     } else {
-      setMessage({ type: 'success', text: 'API Key 已保存' })
+      setMessage({ type: 'success', text: '设置已保存' })
     }
   }
 
@@ -65,9 +97,47 @@ export default function SettingsPage() {
         <Card>
           <CardContent className="pt-6">
             <form onSubmit={handleSave} className="space-y-6">
+              {/* AI Provider */}
               <div className="space-y-2">
-                <Label htmlFor="apiKey">OpenAI API Key (BYOK)</Label>
-                <p className="text-sm text-gray-500">用于 AI 守门员功能验证精读成果。支持 GPT-4o 系列模型。</p>
+                <Label>AI 提供商</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {AI_PROVIDERS.map((provider) => (
+                    <button
+                      key={provider.id}
+                      type="button"
+                      onClick={() => handleProviderChange(provider.id)}
+                      className={`p-3 rounded-lg border text-sm transition-colors ${
+                        apiProvider === provider.id
+                          ? 'border-black bg-gray-50 font-medium'
+                          : 'border-gray-200 hover:border-gray-400'
+                      }`}
+                    >
+                      {provider.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* API Base URL */}
+              <div className="space-y-2">
+                <Label htmlFor="apiBaseUrl">API 地址</Label>
+                <p className="text-sm text-gray-500">AI 服务的 API 端点地址</p>
+                <div className="relative">
+                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Input
+                    id="apiBaseUrl"
+                    placeholder="https://api.openai.com/v1"
+                    value={apiBaseUrl}
+                    onChange={(e) => setApiBaseUrl(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              {/* API Key */}
+              <div className="space-y-2">
+                <Label htmlFor="apiKey">API Key (BYOK)</Label>
+                <p className="text-sm text-gray-500">用于 AI 守门员和预读功能验证精读成果</p>
                 <div className="relative">
                   <Input
                     id="apiKey"
@@ -84,6 +154,27 @@ export default function SettingsPage() {
                   >
                     {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
+                </div>
+              </div>
+
+              {/* Model Selection */}
+              <div className="space-y-2">
+                <Label>AI 模型</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {MODELS.map((model) => (
+                    <button
+                      key={model.id}
+                      type="button"
+                      onClick={() => setAiModel(model.id)}
+                      className={`p-3 rounded-lg border text-sm transition-colors ${
+                        aiModel === model.id
+                          ? 'border-black bg-gray-50 font-medium'
+                          : 'border-gray-200 hover:border-gray-400'
+                      }`}
+                    >
+                      {model.name}
+                    </button>
+                  ))}
                 </div>
               </div>
 

@@ -13,7 +13,7 @@ export async function getAIRecommendation(
   const supabase = await createClient()
   const { data: profile } = await supabase
     .from('profiles')
-    .select('openai_api_key')
+    .select('ai_provider, ai_base_url, openai_api_key, ai_model')
     .eq('id', user.id)
     .single()
 
@@ -21,8 +21,17 @@ export async function getAIRecommendation(
     return { success: false, error: '请先在设置中配置 OpenAI API Key' }
   }
 
+  if (!profile?.ai_base_url) {
+    return { success: false, error: '请先在设置中配置 API 地址' }
+  }
+
   try {
-    const openai = new OpenAI({ apiKey: profile.openai_api_key })
+    const openai = new OpenAI({
+      apiKey: profile.openai_api_key,
+      baseURL: profile.ai_base_url,
+    })
+
+    const model = profile.ai_model || 'gpt-4o'
 
     const prompt = userGoal
       ? `用户的目标/困惑是："${userGoal}"
@@ -52,7 +61,7 @@ export async function getAIRecommendation(
 }`
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model,
       messages: [
         {
           role: 'system',

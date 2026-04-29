@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { BookOpen, Plus, X, Search, Loader2, Info, Sparkles, ArrowRight, Check } from 'lucide-react'
+import { BookOpen, Plus, X, Search, Loader2, Sparkles, ArrowRight, Check, MessageCircle, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -16,7 +16,7 @@ import { analyzeBookForUser } from '@/lib/book-actions'
 import type { Category, ReadingMode, BookGenre, SearchResult, AIRecommendation } from '@/types'
 import { READING_MODE_LABELS, BOOK_GENRE_LABELS } from '@/types'
 
-type Step = 'search' | 'form'
+type Step = 'search' | 'ai-mode' | 'ai-analyzing' | 'review' | 'finalize'
 
 export default function NewBookPage() {
   const router = useRouter()
@@ -24,14 +24,11 @@ export default function NewBookPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [categories, setCategories] = useState<Category[]>([])
+
+  // Book info (from search or manual)
   const [title, setTitle] = useState('')
   const [author, setAuthor] = useState('')
   const [coverUrl, setCoverUrl] = useState('')
-  const [readingMode, setReadingMode] = useState<ReadingMode>('skim')
-  const [bookGenre, setBookGenre] = useState<BookGenre | ''>('')
-  const [motivation, setMotivation] = useState('')
-  const [coreQuestions, setCoreQuestions] = useState<string[]>([''])
-  const [categoryId, setCategoryId] = useState<string>('')
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('')
@@ -40,10 +37,17 @@ export default function NewBookPage() {
   const [showResults, setShowResults] = useState(false)
 
   // AI pre-read state
-  const [showAIOptions, setShowAIOptions] = useState(false)
+  const [selectedAIMode, setSelectedAIMode] = useState<'goal' | 'direct' | null>(null)
   const [userGoal, setUserGoal] = useState('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [aiRecommendation, setAiRecommendation] = useState<AIRecommendation | null>(null)
+
+  // Form state (filled from AI or manual)
+  const [readingMode, setReadingMode] = useState<ReadingMode>('skim')
+  const [bookGenre, setBookGenre] = useState<BookGenre | ''>('')
+  const [motivation, setMotivation] = useState('')
+  const [coreQuestions, setCoreQuestions] = useState<string[]>([''])
+  const [categoryId, setCategoryId] = useState<string>('')
 
   useEffect(() => {
     const supabase = createClient()
@@ -83,31 +87,50 @@ export default function NewBookPage() {
     setSearchQuery('')
     setSearchResults([])
     setShowResults(false)
-    setStep('form')
+    setStep('ai-mode')
   }
 
   const handleManualEntry = () => {
-    setStep('form')
+    setStep('ai-mode')
   }
 
-  const handleAIPreRead = async () => {
+  const handleAIModeSelect = (mode: 'goal' | 'direct') => {
+    setSelectedAIMode(mode)
+    setStep('ai-analyzing')
+    runAIAnalysis(mode)
+  }
+
+  const runAIAnalysis = async (mode: 'goal' | 'direct') => {
     if (!title.trim()) return
     setIsAnalyzing(true)
     setAiRecommendation(null)
-    const result = await analyzeBookForUser(title, author, userGoal || undefined)
+    const result = await analyzeBookForUser(
+      title,
+      author,
+      mode === 'goal' ? userGoal : undefined
+    )
     if (result.success && result.recommendation) {
       setAiRecommendation(result.recommendation)
-      // Auto-fill recommendations
-      if (result.recommendation.core_questions.length > 0) {
-        setCoreQuestions(result.recommendation.core_questions)
-      }
+      setCoreQuestions(result.recommendation.core_questions.length > 0
+        ? result.recommendation.core_questions
+        : [''])
       if (result.recommendation.suggested_genre) {
         setBookGenre(result.recommendation.suggested_genre)
       }
+      setStep('review')
     } else {
-      alert(result.error || 'AI 分析失败')
+      alert(result.error || 'AI 分析失败，请重试或选择手动输入')
+      setStep('ai-mode')
     }
     setIsAnalyzing(false)
+  }
+
+  const handleAcceptRecommendations = () => {
+    setStep('finalize')
+  }
+
+  const handleModifyRecommendations = () => {
+    setStep('finalize')
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -132,7 +155,7 @@ export default function NewBookPage() {
     if (!error) router.push('/dashboard')
   }
 
-  // Step 1: Search or manual entry
+  // ============ STEP 1: Search ============
   if (step === 'search') {
     return (
       <div className="min-h-screen bg-white text-black p-6 md:p-12">
@@ -184,7 +207,7 @@ export default function NewBookPage() {
                   </div>
                 )}
               </div>
-              <p className="text-xs text-gray-400 mt-2">支持 Google Books 和 Open Library 双源搜索</p>
+              <p className="text-xs text-gray-400 mt-2">支持 Google Books、Open Library、豆瓣 多源搜索</p>
             </CardContent>
           </Card>
 
@@ -200,107 +223,224 @@ export default function NewBookPage() {
     )
   }
 
-  // Step 2: Form with AI pre-read option
+  // ============ STEP 2: Choose AI Mode ============
+  if (step === 'ai-mode') {
+    return (
+      <div className="min-h-screen bg-white text-black p-6 md:p-12">
+        <div className="max-w-2xl mx-auto">
+          <button onClick={() => setStep('search')} className="text-sm text-gray-500 hover:text-black mb-4">
+            ← 重新搜索
+          </button>
+
+          <div className="flex items-center gap-3 mb-8">
+            <Sparkles className="w-8 h-8 text-purple-500" />
+            <h1 className="text-2xl font-bold tracking-tight">AI 预读助手</h1>
+          </div>
+
+          {/* Selected Book */}
+          <Card className="mb-6 bg-gray-50">
+            <CardContent className="pt-4 flex items-center gap-4">
+              {coverUrl ? (
+                <img src={coverUrl} alt="" className="w-12 h-16 object-cover rounded" />
+              ) : (
+                <div className="w-12 h-16 bg-gray-200 rounded flex items-center justify-center">
+                  <BookOpen className="w-5 h-5 text-gray-400" />
+                </div>
+              )}
+              <div>
+                <h2 className="font-semibold">{title}</h2>
+                {author && <p className="text-sm text-gray-500">{author}</p>}
+              </div>
+            </CardContent>
+          </Card>
+
+          <p className="text-gray-600 mb-6">请选择 AI 分析方式：</p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Method A */}
+            <button
+              onClick={() => handleAIModeSelect('goal')}
+              className="p-6 rounded-xl border-2 border-purple-200 bg-purple-50 hover:border-purple-400 transition-colors text-left"
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <MessageCircle className="w-6 h-6 text-purple-500" />
+                <span className="font-semibold">方案 A</span>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">告诉 AI 你当前的问题或目标</p>
+              <p className="text-xs text-gray-400">AI 会判断这本书是否能帮你，并推荐核心问题</p>
+            </button>
+
+            {/* Method B */}
+            <button
+              onClick={() => handleAIModeSelect('direct')}
+              className="p-6 rounded-xl border-2 border-blue-200 bg-blue-50 hover:border-blue-400 transition-colors text-left"
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <Zap className="w-6 h-6 text-blue-500" />
+                <span className="font-semibold">方案 B</span>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">让 AI 直接分析书籍内容</p>
+              <p className="text-xs text-gray-400">AI 会深入分析书籍，推荐核心问题和阅读方向</p>
+            </button>
+          </div>
+
+          {/* Goal Input (for Method A) */}
+          {selectedAIMode === 'goal' && (
+            <div className="mt-6">
+              <Textarea
+                placeholder="描述你当前的问题或目标，例如：我想学习投资理财，但不知道从何开始"
+                value={userGoal}
+                onChange={(e) => setUserGoal(e.target.value)}
+                rows={3}
+                className="text-sm"
+              />
+            </div>
+          )}
+
+          <div className="mt-6 text-center">
+            <Button variant="outline" onClick={() => setStep('finalize')}>
+              跳过 AI 分析，直接手动填写
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ============ STEP 3: AI Analyzing ============
+  if (step === 'ai-analyzing') {
+    return (
+      <div className="min-h-screen bg-white text-black p-6 md:p-12 flex items-center justify-center">
+        <div className="text-center">
+          <Sparkles className="w-12 h-12 mx-auto mb-4 text-purple-500 animate-pulse" />
+          <h2 className="text-xl font-semibold mb-2">AI 正在分析中...</h2>
+          <p className="text-gray-500">
+            {selectedAIMode === 'goal' ? '根据你的目标分析书籍' : '深入分析书籍内容'}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // ============ STEP 4: Review AI Recommendations ============
+  if (step === 'review') {
+    return (
+      <div className="min-h-screen bg-white text-black p-6 md:p-12">
+        <div className="max-w-2xl mx-auto">
+          <div className="flex items-center gap-3 mb-8">
+            <Sparkles className="w-8 h-8 text-green-500" />
+            <h1 className="text-2xl font-bold tracking-tight">AI 推荐结果</h1>
+          </div>
+
+          {/* Selected Book */}
+          <Card className="mb-6 bg-gray-50">
+            <CardContent className="pt-4 flex items-center gap-4">
+              {coverUrl ? (
+                <img src={coverUrl} alt="" className="w-12 h-16 object-cover rounded" />
+              ) : (
+                <div className="w-12 h-16 bg-gray-200 rounded flex items-center justify-center">
+                  <BookOpen className="w-5 h-5 text-gray-400" />
+                </div>
+              )}
+              <div>
+                <h2 className="font-semibold">{title}</h2>
+                {author && <p className="text-sm text-gray-500">{author}</p>}
+              </div>
+            </CardContent>
+          </Card>
+
+          {aiRecommendation && (
+            <>
+              {/* Reading Suggestion */}
+              <Card className="mb-6 bg-green-50 border-green-200">
+                <CardContent className="pt-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Check className="w-5 h-5 text-green-600" />
+                    <span className="font-medium text-green-800">阅读建议</span>
+                  </div>
+                  <p className="text-sm text-gray-700">{aiRecommendation.reading_suggestion}</p>
+                  <p className="text-xs text-gray-500 mt-2">目标读者：{aiRecommendation.target_audience}</p>
+                </CardContent>
+              </Card>
+
+              {/* Suggested Genre */}
+              <Card className="mb-6">
+                <CardContent className="pt-4">
+                  <Label className="text-sm text-gray-500">推荐分类</Label>
+                  <div className="mt-2 flex items-center gap-2">
+                    <Badge variant="outline">{BOOK_GENRE_LABELS[aiRecommendation.suggested_genre]}</Badge>
+                    <span className="text-xs text-gray-400">（你可以在下一步修改）</span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Core Questions */}
+              <Card className="mb-6">
+                <CardContent className="pt-4">
+                  <Label className="text-sm text-gray-500">核心问题</Label>
+                  <ul className="mt-3 space-y-2">
+                    {aiRecommendation.core_questions.map((q, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <Badge variant="secondary" className="shrink-0">Q{i+1}</Badge>
+                        <span className="text-sm">{q}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          <div className="flex gap-4">
+            <Button onClick={handleAcceptRecommendations} className="flex-1 bg-green-600 hover:bg-green-700 text-white">
+              <Check className="w-4 h-4 mr-2" />
+              采纳推荐，继续
+            </Button>
+            <Button onClick={handleModifyRecommendations} variant="outline" className="flex-1">
+              <ArrowRight className="w-4 h-4 mr-2" />
+              修改建议
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ============ STEP 5: Finalize (Reading Mode, Genre, Motivation, etc.) ============
   return (
     <div className="min-h-screen bg-white text-black p-6 md:p-12">
       <div className="max-w-2xl mx-auto">
-        <button onClick={() => setStep('search')} className="text-sm text-gray-500 hover:text-black mb-4">
-          ← 重新搜索
+        <button onClick={() => setStep('review')} className="text-sm text-gray-500 hover:text-black mb-4">
+          ← 返回AI推荐
         </button>
 
         <div className="flex items-center gap-3 mb-8">
           <BookOpen className="w-8 h-8" />
-          <h1 className="text-2xl font-bold tracking-tight">发起新阅读项目</h1>
+          <h1 className="text-2xl font-bold tracking-tight">完成阅读项目设置</h1>
         </div>
 
-        {/* AI Pre-read Section */}
-        {!aiRecommendation && (
-          <Card className="mb-6 bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
-            <CardContent className="pt-6">
-              {!showAIOptions ? (
-                <div className="text-center">
-                  <Sparkles className="w-8 h-8 mx-auto mb-3 text-purple-500" />
-                  <p className="text-sm text-gray-600 mb-4">让 AI 帮你分析这本书，推荐核心问题</p>
-                  <Button onClick={() => setShowAIOptions(true)} variant="outline">
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    启用 AI 预读助手
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex items-start gap-2">
-                    <Info className="w-4 h-4 text-purple-500 mt-1" />
-                    <p className="text-sm text-gray-600">
-                      <strong>方式 A：</strong>告诉 AI 你的困惑，AI 会判断这本书是否能帮你，并推荐核心问题<br/>
-                      <strong>方式 B：</strong>让 AI 直接分析书籍内容，推荐核心问题
-                    </p>
-                  </div>
-                  <Textarea
-                    placeholder="描述你当前的问题或目标（选填，如：我想学习投资理财，但不知道从何开始）"
-                    value={userGoal}
-                    onChange={(e) => setUserGoal(e.target.value)}
-                    rows={2}
-                    className="text-sm"
-                  />
-                  <Button
-                    onClick={handleAIPreRead}
-                    disabled={isAnalyzing || !title.trim()}
-                    className="w-full bg-purple-500 hover:bg-purple-600 text-white"
-                  >
-                    {isAnalyzing ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        AI 分析中...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4 mr-2" />
-                        开始 AI 分析
-                      </>
-                    )}
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* AI Recommendation Result */}
-        {aiRecommendation && (
-          <Card className="mb-6 bg-green-50 border-green-200">
-            <CardContent className="pt-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Check className="w-5 h-5 text-green-600" />
-                <span className="font-medium text-green-800">AI 推荐已生成</span>
+        {/* Selected Book */}
+        <Card className="mb-6 bg-gray-50">
+          <CardContent className="pt-4 flex items-center gap-4">
+            {coverUrl ? (
+              <img src={coverUrl} alt="" className="w-12 h-16 object-cover rounded" />
+            ) : (
+              <div className="w-12 h-16 bg-gray-200 rounded flex items-center justify-center">
+                <BookOpen className="w-5 h-5 text-gray-400" />
               </div>
-              <p className="text-sm text-gray-600 mb-2">{aiRecommendation.reading_suggestion}</p>
-              <p className="text-xs text-gray-500">推荐分类：{BOOK_GENRE_LABELS[aiRecommendation.suggested_genre]}</p>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => { setAiRecommendation(null); setCoreQuestions(['']) }}
-                className="mt-2 text-xs"
-              >
-                重新分析
-              </Button>
-            </CardContent>
-          </Card>
-        )}
+            )}
+            <div>
+              <h2 className="font-semibold">{title}</h2>
+              {author && <p className="text-sm text-gray-500">{author}</p>}
+            </div>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardContent className="pt-6">
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="title">书名 <span className="text-red-500">*</span></Label>
-                <Input id="title" placeholder="输入书名" value={title} onChange={(e) => setTitle(e.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="author">作者</Label>
-                <Input id="author" placeholder="输入作者（选填）" value={author} onChange={(e) => setAuthor(e.target.value)} />
-              </div>
-
               {/* Reading Mode Selection */}
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <Label>阅读模式 <span className="text-red-500">*</span></Label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
@@ -323,7 +463,7 @@ export default function NewBookPage() {
               </div>
 
               {/* Book Genre Selection */}
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <Label>书籍类型 <span className="text-red-500">*</span></Label>
                 <div className="grid grid-cols-3 gap-2">
                   {(Object.entries(BOOK_GENRE_LABELS) as [BookGenre, string][]).map(([key, label]) => (
@@ -339,8 +479,9 @@ export default function NewBookPage() {
                 </div>
               </div>
 
+              {/* Category Selection */}
               {categories.length > 0 && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <Label>分类（可选）</Label>
                   <div className="flex flex-wrap gap-2">
                     {categories.map((cat) => (
@@ -358,19 +499,25 @@ export default function NewBookPage() {
               )}
 
               <Separator />
+
+              {/* Motivation */}
               <div className="space-y-2">
                 <Label htmlFor="motivation">读书动机 <span className="text-red-500">*</span></Label>
                 <p className="text-sm text-gray-500">我最近遇到了什么痛点？为什么要读这本？</p>
-                <Textarea id="motivation" placeholder="描述你当前的困惑或想解决的问题..." value={motivation} onChange={(e) => setMotivation(e.target.value)} rows={3} required />
+                <Textarea
+                  id="motivation"
+                  placeholder="描述你当前的困惑或想解决的问题..."
+                  value={motivation}
+                  onChange={(e) => setMotivation(e.target.value)}
+                  rows={3}
+                  required
+                />
               </div>
+
+              {/* Core Questions */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <Label>核心诉求</Label>
-                    {aiRecommendation && (
-                      <p className="text-xs text-green-600">AI 已推荐问题，可自行修改</p>
-                    )}
-                  </div>
+                  <Label>核心诉求</Label>
                   {coreQuestions.length < 3 && (
                     <Button type="button" variant="outline" size="sm" onClick={() => setCoreQuestions([...coreQuestions, ''])}>
                       <Plus className="w-4 h-4 mr-1" />添加
@@ -380,7 +527,11 @@ export default function NewBookPage() {
                 {coreQuestions.map((q, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <Badge variant="secondary" className="shrink-0">Q{i+1}</Badge>
-                    <Input placeholder={`问题 ${i+1}`} value={q} onChange={(e) => { const u = [...coreQuestions]; u[i] = e.target.value; setCoreQuestions(u) }} />
+                    <Input
+                      placeholder={`问题 ${i+1}`}
+                      value={q}
+                      onChange={(e) => { const u = [...coreQuestions]; u[i] = e.target.value; setCoreQuestions(u) }}
+                    />
                     {coreQuestions.length > 1 && (
                       <Button type="button" variant="ghost" size="icon" onClick={() => setCoreQuestions(coreQuestions.filter((_, j) => j !== i))}>
                         <X className="w-4 h-4" />
@@ -389,9 +540,11 @@ export default function NewBookPage() {
                   </div>
                 ))}
               </div>
+
               <Separator />
+
               <div className="flex justify-end">
-                <Button type="submit" disabled={isLoading || !title.trim() || !motivation.trim() || !userId || !bookGenre} className="bg-black text-white hover:bg-gray-800">
+                <Button type="submit" disabled={isLoading || !title.trim() || !motivation.trim() || !bookGenre} className="bg-black text-white hover:bg-gray-800">
                   {isLoading ? '创建中...' : '确认立项'}
                 </Button>
               </div>
