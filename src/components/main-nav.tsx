@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { BookOpen, Target, LogOut } from 'lucide-react'
+import { BookOpen, Target, LogOut, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -12,6 +12,7 @@ export function MainNav() {
   const pathname = usePathname()
   const router = useRouter()
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     const supabase = createClient()
@@ -23,6 +24,14 @@ export function MainNav() {
     await supabase.auth.signOut()
     router.push('/')
     router.refresh()
+  }
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (searchQuery.trim()) {
+      router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`)
+      setSearchQuery('')
+    }
   }
 
   const isBookShelf = pathname === '/dashboard' || pathname.startsWith('/books')
@@ -47,11 +56,23 @@ export function MainNav() {
             </>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {isLoggedIn && (
+            <form onSubmit={handleSearch} className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
+              <input
+                type="search"
+                placeholder="搜索..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-24 h-7 pl-7 pr-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:border-gray-400"
+              />
+            </form>
+          )}
           {isLoggedIn ? (
             <>
               <Link href="/books/new" className="text-sm text-gray-400 hover:text-black transition-colors">+ 新建</Link>
-              <button onClick={handleLogout} className="flex items-center gap-1 text-sm text-gray-400 hover:text-black transition-colors ml-2"><LogOut className="w-4 h-4" /></button>
+              <button onClick={handleLogout} className="flex items-center gap-1 text-sm text-gray-400 hover:text-black transition-colors"><LogOut className="w-4 h-4" /></button>
             </>
           ) : (
             <Link href="/login"><Button size="sm" variant="outline" className="text-sm">登录 / 注册</Button></Link>

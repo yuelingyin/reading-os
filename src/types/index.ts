@@ -7,6 +7,14 @@ export interface DailyPlan {
   }
 }
 
+export interface Category {
+  id: string
+  user_id: string
+  name: string
+  color: string
+  created_at: string
+}
+
 export interface Book {
   id: string
   user_id: string
@@ -17,8 +25,10 @@ export interface Book {
   reading_motivation: string | null
   core_questions: string[] | null
   daily_plan: DailyPlan | null
+  category_id: string | null
   created_at: string
   updated_at: string
+  categories?: Category | null
 }
 
 export interface ChapterReview {
