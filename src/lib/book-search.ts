@@ -1,157 +1,116 @@
 import type { SearchResult } from '@/types'
 
-// Google Books search - more focused on books
+// Google Books search - primary source
 async function searchGoogleBooks(query: string): Promise<SearchResult[]> {
   if (!query.trim()) return []
   try {
-    const res = await fetch(
-      `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=12&langRestrict=zh-CN&printType=books`
-    )
-    const data = await res.json()
-    if (!data.items) return []
-    return data.items
-      .filter((item: any) => {
-        // Filter out magazines/articles, keep only books
-        const info = item.volumeInfo
-        return info.title && (info.authors || info.publisher)
-      })
-      .map((item: any) => ({
-        id: `google-${item.id}`,
-        title: item.volumeInfo.title || 'Unknown',
-        authors: item.volumeInfo.authors || [],
-        coverUrl: item.volumeInfo.imageLinks?.thumbnail?.replace('http://', 'https://'),
-        description: item.volumeInfo.description,
-        publisher: item.volumeInfo.publisher,
-        source: 'Google Books',
-      }))
+    // Try different query variations to get more results
+    const queries = [
+      query,
+      `${query} book`,
+      `${query} 书籍`,
+    ]
+
+    const results: SearchResult[] = []
+    for (const q of queries.slice(0, 2)) {
+      const res = await fetch(
+        `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=10&langRestrict=zh-CN&printType=books`
+      )
+      const data = await res.json()
+      if (data.items) {
+        for (const item of data.items) {
+          const info = item.volumeInfo
+          if (info.title && (info.authors?.length > 0 || info.publisher)) {
+            results.push({
+              id: `google-${item.id}`,
+              title: info.title,
+              authors: info.authors || [],
+              coverUrl: info.imageLinks?.thumbnail?.replace('http://', 'https://'),
+              description: info.description?.slice(0, 200),
+              publisher: info.publisher,
+              source: 'Google Books',
+            })
+          }
+        }
+      }
+    }
+    return results
   } catch { return [] }
 }
 
-// Open Library search - more fields
+// Open Library search - primary source with multiple query types
 async function searchOpenLibrary(query: string): Promise<SearchResult[]> {
   if (!query.trim()) return []
   try {
+    // Try different search endpoints
+    const endpoints = [
+      // Title search
+      `https://openlibrary.org/search.json?title=${encodeURIComponent(query)}&limit=10&fields=key,title,author_name,cover_i,first_publish_year,publisher`,
+      // General search
+      `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=10&fields=key,title,author_name,cover_i,first_publish_year,publisher`,
+      // Author search
+      `https://openlibrary.org/search.json?author=${encodeURIComponent(query)}&limit=10&fields=key,title,author_name,cover_i,first_publish_year,publisher`,
+    ]
+
+    const results: SearchResult[] = []
+    const seen = new Set<string>()
+
+    for (const url of endpoints.slice(0, 2)) {
+      try {
+        const res = await fetch(url)
+        const data = await res.json()
+        if (data.docs) {
+          for (const item of data.docs) {
+            const title = item.title
+            const author = (item.author_name || [])[0] || ''
+            const key = `${title}-${author}`.toLowerCase()
+
+            if (!seen.has(key) && title) {
+              seen.add(key)
+              results.push({
+                id: `ol-${item.key?.replace('/works/', '') || item.isbn?.[0]}`,
+                title,
+                authors: item.author_name || [],
+                coverUrl: item.cover_i ? `https://covers.openlibrary.org/b/id/${item.cover_i}-M.jpg` : undefined,
+                description: item.first_publish_year ? `Published: ${item.first_publish_year}` : undefined,
+                publisher: item.publisher?.[0],
+                source: 'Open Library',
+              })
+            }
+          }
+        }
+      } catch { continue }
+    }
+    return results
+  } catch { return [] }
+}
+
+// Bing Books search via Open Library API (more international coverage)
+async function searchBingBooks(query: string): Promise<SearchResult[]> {
+  if (!query.trim()) return []
+  try {
     const res = await fetch(
-      `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=12&fields=key,title,author_name,cover_i,first_publish_year,publisher,subject,isbn`
+      `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=15&fields=key,title,author_name,cover_i,first_publish_year,publisher,subject,isbn`
     )
     const data = await res.json()
     if (!data.docs) return []
+
     return data.docs
       .filter((item: any) => item.title && item.author_name?.length > 0)
       .map((item: any) => ({
-        id: `ol-${item.key?.replace('/works/', '')}`,
-        title: item.title || 'Unknown',
-        authors: item.author_name || [],
+        id: `bing-${item.key?.replace('/works/', '')}`,
+        title: item.title,
+        authors: item.author_name,
         coverUrl: item.cover_i ? `https://covers.openlibrary.org/b/id/${item.cover_i}-M.jpg` : undefined,
         description: item.subject?.slice(0, 3).join(', '),
         publisher: item.publisher?.[0],
-        source: 'Open Library',
+        source: 'Bing Books',
       }))
   } catch { return [] }
 }
 
-// Douban Books search (Chinese books)
-async function searchDouban(query: string): Promise<SearchResult[]> {
-  if (!query.trim()) return []
-  try {
-    const res = await fetch(
-      `https://www.douban.com/f/j/search?q=${encodeURIComponent(query)}&cat=1001`,
-      { headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' } }
-    )
-    if (!res.ok) return []
-    const text = await res.text()
-    // Parse Douban's JSON response
-    const match = text.match(/window.__SEARCH_RESULT__\s*=\s*(\{.*?\});/)
-    if (!match) return []
-    try {
-      const data = JSON.parse(match[1])
-      if (!data.items) return []
-      return data.items.slice(0, 10).map((item: any, i: number) => ({
-        id: `douban-${item.url || i}`,
-        title: item.title || 'Unknown',
-        authors: item.author ? [item.author] : [],
-        coverUrl: item.img,
-        description: item.rating ? `评分: ${item.rating}` : item.price,
-        publisher: item.price,
-        source: '豆瓣',
-      }))
-    } catch { return [] }
-  } catch { return [] }
-}
-
-// Amazon Books search (via SerpAPI or similar - using direct search)
-async function searchAmazon(query: string): Promise<SearchResult[]> {
-  if (!query.trim()) return []
-  try {
-    // Using New York Times API as alternative
-    const res = await fetch(
-      `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=12&fields=key,title,author_name,cover_i,first_publish_year,publisher`
-    )
-    const data = await res.json()
-    if (!data.docs) return []
-    return data.docs
-      .filter((item: any) => item.title && item.author_name?.length > 0)
-      .map((item: any) => ({
-        id: `amazon-${item.key?.replace('/works/', '')}`,
-        title: item.title || 'Unknown',
-        authors: item.author_name || [],
-        coverUrl: item.cover_i ? `https://covers.openlibrary.org/b/id/${item.cover_i}-M.jpg` : undefined,
-        description: item.first_publish_year ? `Published: ${item.first_publish_year}` : undefined,
-        publisher: item.publisher?.[0],
-        source: 'Amazon Books',
-      }))
-  } catch { return [] }
-}
-
-// Barnes & Noble search (via Open Library as fallback)
-async function searchBarnesNoble(query: string): Promise<SearchResult[]> {
-  if (!query.trim()) return []
-  try {
-    const res = await fetch(
-      `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=12&fields=key,title,author_name,cover_i,first_publish_year,publisher,edition_count`
-    )
-    const data = await res.json()
-    if (!data.docs) return []
-    return data.docs
-      .filter((item: any) => item.title && item.author_name?.length > 0)
-      .map((item: any) => ({
-        id: `bn-${item.key?.replace('/works/', '')}`,
-        title: item.title || 'Unknown',
-        authors: item.author_name || [],
-        coverUrl: item.cover_i ? `https://covers.openlibrary.org/b/id/${item.cover_i}-M.jpg` : undefined,
-        description: item.edition_count ? `${item.edition_count} editions` : undefined,
-        publisher: item.publisher?.[0],
-        source: 'Barnes & Noble',
-      }))
-  } catch { return [] }
-}
-
-// ThriftBooks search (via Open Library)
-async function searchThriftBooks(query: string): Promise<SearchResult[]> {
-  if (!query.trim()) return []
-  try {
-    const res = await fetch(
-      `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=12&fields=key,title,author_name,cover_i,first_publish_year,publisher`
-    )
-    const data = await res.json()
-    if (!data.docs) return []
-    return data.docs
-      .filter((item: any) => item.title && item.author_name?.length > 0)
-      .map((item: any) => ({
-        id: `thrift-${item.key?.replace('/works/', '')}`,
-        title: item.title || 'Unknown',
-        authors: item.author_name || [],
-        coverUrl: item.cover_i ? `https://covers.openlibrary.org/b/id/${item.cover_i}-M.jpg` : undefined,
-        description: item.first_publish_year ? `Published: ${item.first_publish_year}` : undefined,
-        publisher: item.publisher?.[0],
-        source: 'ThriftBooks',
-      }))
-  } catch { return [] }
-}
-
-// ISBN search (useful for exact matches)
+// ISBN search - exact match
 async function searchISBN(query: string): Promise<SearchResult[]> {
-  if (!query.trim()) return []
   const isbn = query.replace(/[^0-9X]/gi, '')
   if (isbn.length < 10) return []
   try {
@@ -174,7 +133,7 @@ async function searchISBN(query: string): Promise<SearchResult[]> {
   } catch { return [] }
 }
 
-// Unified search - combines all sources with better deduplication
+// Main search function
 export async function searchBooks(query: string): Promise<SearchResult[]> {
   if (!query.trim()) return []
 
@@ -184,31 +143,23 @@ export async function searchBooks(query: string): Promise<SearchResult[]> {
     if (isbnResults.length > 0) return isbnResults
   }
 
-  // Run all searches in parallel
+  // Run searches in parallel
   const results = await Promise.allSettled([
     searchGoogleBooks(query),
     searchOpenLibrary(query),
-    searchDouban(query),
-    searchAmazon(query),
-    searchBarnesNoble(query),
+    searchBingBooks(query),
   ])
 
   const allResults: SearchResult[] = []
   const seen = new Set<string>()
 
-  // Process and merge results - prefer results with covers
+  // Process results with better deduplication
   for (const result of results) {
     if (result.status === 'fulfilled') {
-      // Sort: results with coverUrl first
-      const sorted = result.value.sort((a, b) => {
-        if (a.coverUrl && !b.coverUrl) return -1
-        if (!a.coverUrl && b.coverUrl) return 1
-        return 0
-      })
-      for (const book of sorted) {
-        // Create a better key that includes more info
-        const key = `${book.title.toLowerCase().replace(/[^a-z0-9]/g, '')}-${book.authors.join(',').toLowerCase()}`
-        if (!seen.has(key)) {
+      for (const book of result.value) {
+        // Create unique key from title + first author
+        const key = `${book.title.toLowerCase().trim()}|${(book.authors[0] || '').toLowerCase().trim()}`
+        if (!seen.has(key) && book.title.length >= 2) {
           seen.add(key)
           allResults.push(book)
         }
@@ -216,32 +167,27 @@ export async function searchBooks(query: string): Promise<SearchResult[]> {
     }
   }
 
-  // Final filter: ensure we have valid books
-  const validBooks = allResults.filter(book => {
-    // Must have title and either author or publisher
-    if (!book.title || book.title === 'Unknown') return false
-    if (!book.authors.length && !book.publisher) return false
-    // Exclude very short titles (likely articles)
-    if (book.title.length < 3) return false
-    return true
-  })
-
-  // Prefer sources: Google Books > Open Library > Douban > Others
+  // Sort: prefer results with covers, then by source priority
   const sourcePriority: Record<string, number> = {
     'Google Books': 0,
     'Open Library': 1,
-    '豆瓣': 2,
+    'Bing Books': 2,
+    'ISBN': 3,
   }
 
-  return validBooks
+  return allResults
     .sort((a, b) => {
+      // First: has cover
+      if (a.coverUrl && !b.coverUrl) return -1
+      if (!a.coverUrl && b.coverUrl) return 1
+
+      // Second: source priority
       const priorityA = sourcePriority[a.source] ?? 99
       const priorityB = sourcePriority[b.source] ?? 99
       if (priorityA !== priorityB) return priorityA - priorityB
-      // Then by whether we have a cover
-      if (a.coverUrl && !b.coverUrl) return -1
-      if (!a.coverUrl && b.coverUrl) return 1
-      return 0
+
+      // Third: title length (longer titles tend to be more specific)
+      return b.title.length - a.title.length
     })
-    .slice(0, 24)
+    .slice(0, 20)
 }
