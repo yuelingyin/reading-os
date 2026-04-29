@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Key, Eye, EyeOff, Save, Globe, RefreshCw, Loader2 } from 'lucide-react'
+import { ArrowLeft, Key, Eye, EyeOff, Save, Globe, RefreshCw, Loader2, CheckCircle, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -56,8 +56,11 @@ export default function SettingsPage() {
   const [showKey, setShowKey] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isFetchingModels, setIsFetchingModels] = useState(false)
+  const [isTestingConnection, setIsTestingConnection] = useState(false)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [availableModels, setAvailableModels] = useState<string[]>([])
+  const [connectionStatus, setConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [connectionMessage, setConnectionMessage] = useState<string>('')
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const currentProvider = AI_PROVIDERS.find(p => p.id === apiProvider)
@@ -83,6 +86,7 @@ export default function SettingsPage() {
     setAvailableModels([])
     setAiModel('')
     setCustomModel('')
+    setConnectionStatus('idle')
     const provider = AI_PROVIDERS.find(p => p.id === providerId)
     if (provider) {
       setApiBaseUrl(provider.baseUrl)
@@ -92,14 +96,16 @@ export default function SettingsPage() {
     }
   }
 
-  const fetchModels = async () => {
+  const testConnection = async (): Promise<boolean> => {
     if (!apiKey.trim() || !apiBaseUrl.trim()) {
-      setFetchError('请先填写 API 地址和 Key')
-      return
+      setConnectionStatus('error')
+      setConnectionMessage('请先填写 API 地址和 Key')
+      return false
     }
 
-    setIsFetchingModels(true)
-    setFetchError(null)
+    setIsTestingConnection(true)
+    setConnectionStatus('idle')
+    setConnectionMessage('')
 
     try {
       const response = await fetch('/api/models', {
@@ -115,19 +121,28 @@ export default function SettingsPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || '获取模型列表失败')
+        throw new Error(data.error || '连接失败')
       }
 
+      setConnectionStatus('success')
+      setConnectionMessage('连接成功！')
       setAvailableModels(data.models || [])
       if (data.models && data.models.length > 0) {
         setAiModel(data.models[0])
         setCustomModel(data.models[0])
       }
+      return true
     } catch (e: any) {
-      setFetchError(e.message || '获取模型列表失败')
+      setConnectionStatus('error')
+      setConnectionMessage(e.message || '连接失败')
+      return false
     } finally {
-      setIsFetchingModels(false)
+      setIsTestingConnection(false)
     }
+  }
+
+  const fetchModels = async () => {
+    await testConnection()
   }
 
   const handleSave = async (e: React.FormEvent) => {
@@ -147,27 +162,37 @@ export default function SettingsPage() {
     // Save to localStorage
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
 
-    // Also try to save to Supabase profiles table (but don't fail if it doesn't work)
-    try {
-      const { createClient } = await import('@/lib/supabase/client')
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        await supabase.from('profiles').upsert({
-          id: user.id,
-          ai_provider: apiProvider,
-          ai_base_url: apiBaseUrl.trim(),
-          openai_api_key: apiKey.trim(),
-          ai_model: finalModel,
-        })
-      }
-    } catch {}
+    // Test connection first
+    const connected = await testConnection()
+
+    // If connection successful, also try to save to Supabase (but don't block on it)
+    if (connected) {
+      try {
+        const { createClient } = await import('@/lib/supabase/client')
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          await supabase.from('profiles').upsert({
+            id: user.id,
+            ai_provider: apiProvider,
+            ai_base_url: apiBaseUrl.trim(),
+            openai_api_key: apiKey.trim(),
+            ai_model: finalModel,
+          })
+        }
+      } catch {}
+    }
 
     setIsSaving(false)
-    setMessage({ type: 'success', text: '设置已保存到浏览器' })
 
-    // Reset message after 3 seconds
-    setTimeout(() => setMessage(null), 3000)
+    if (connected) {
+      setMessage({ type: 'success', text: '设置已保存，AI 连接测试成功！' })
+    } else {
+      setMessage({ type: 'error', text: '设置已保存，但 AI 连接测试失败：' + connectionMessage })
+    }
+
+    // Reset message after 5 seconds
+    setTimeout(() => setMessage(null), 5000)
   }
 
   return (
@@ -215,7 +240,7 @@ export default function SettingsPage() {
                     id="apiBaseUrl"
                     placeholder="https://api.openai.com/v1"
                     value={apiBaseUrl}
-                    onChange={(e) => setApiBaseUrl(e.target.value)}
+                    onChange={(e) => { setApiBaseUrl(e.target.value); setConnectionStatus('idle') }}
                     className="pl-10"
                   />
                 </div>
@@ -230,7 +255,7 @@ export default function SettingsPage() {
                     type={showKey ? 'text' : 'password'}
                     placeholder={apiProvider === 'google' ? 'AIza...' : 'sk-...'}
                     value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
+                    onChange={(e) => { setApiKey(e.target.value); setConnectionStatus('idle') }}
                     className="pr-20"
                   />
                   <button
@@ -243,6 +268,20 @@ export default function SettingsPage() {
                 </div>
               </div>
 
+              {/* Connection Test Result */}
+              {connectionStatus !== 'idle' && (
+                <div className={`p-3 rounded-lg flex items-center gap-2 ${
+                  connectionStatus === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                }`}>
+                  {connectionStatus === 'success' ? (
+                    <CheckCircle className="w-5 h-5" />
+                  ) : (
+                    <XCircle className="w-5 h-5" />
+                  )}
+                  <span className="text-sm">{connectionMessage}</span>
+                </div>
+              )}
+
               {/* Fetch Models Button */}
               <div className="space-y-2">
                 <Label>AI 模型</Label>
@@ -251,18 +290,15 @@ export default function SettingsPage() {
                     type="button"
                     variant="outline"
                     onClick={fetchModels}
-                    disabled={isFetchingModels || !apiKey.trim() || !apiBaseUrl.trim()}
+                    disabled={isFetchingModels || isTestingConnection || !apiKey.trim() || !apiBaseUrl.trim()}
                   >
-                    {isFetchingModels ? (
+                    {isTestingConnection ? (
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     ) : (
                       <RefreshCw className="w-4 h-4 mr-2" />
                     )}
                     拉取模型
                   </Button>
-                  {fetchError && (
-                    <span className="text-sm text-red-500">{fetchError}</span>
-                  )}
                 </div>
               </div>
 
@@ -342,7 +378,7 @@ export default function SettingsPage() {
                 </div>
                 <Button type="submit" disabled={isSaving} className="bg-black text-white hover:bg-gray-800">
                   <Save className="w-4 h-4 mr-2" />
-                  {isSaving ? '保存中...' : '保存设置'}
+                  {isSaving ? '保存并测试...' : '保存设置'}
                 </Button>
               </div>
             </form>
