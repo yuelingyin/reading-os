@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { BookOpen, Plus, ArrowLeft, CheckCircle, Circle, Flag, CheckSquare, Square, Sparkles, BookText, Shield, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -17,10 +18,12 @@ import { READING_MODE_LABELS, BOOK_GENRE_LABELS } from '@/types'
 const statusMap: Record<BookStatus, { label: string; className: string }> = {
   'to-read': { label: '待阅读', className: 'bg-gray-100 text-gray-800' },
   'in-progress': { label: '阅读中', className: 'bg-black text-white' },
-  completed: { label: '已读完', className: 'bg-gray-400 text-white' },
+  'completed': { label: '已读完', className: 'bg-gray-400 text-white' },
+  'abandoned': { label: '已放弃', className: 'bg-red-100 text-red-800' },
 }
 
 export default function BookDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const router = useRouter()
   const [bookId, setBookId] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [book, setBook] = useState<Book | null>(null)
@@ -93,6 +96,15 @@ export default function BookDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   const isCompleted = book.status === 'completed'
+  const isAbandoned = book.status === 'abandoned'
+
+  const handleAbandon = async () => {
+    const reason = prompt('请输入放弃原因（选填）：')
+    if (!bookId) return
+    const supabase = createClient()
+    await supabase.from('books').update({ status: 'abandoned' }).eq('id', bookId).eq('user_id', userId!)
+    router.push('/dashboard')
+  }
 
   return (
     <div className="min-h-screen bg-white text-black p-6 md:p-12">
@@ -203,7 +215,12 @@ export default function BookDetailPage({ params }: { params: Promise<{ id: strin
           ))}
         </div>
         <div className="fixed bottom-6 right-6 flex flex-col gap-3 items-end">
-          {isCompleted ? <div className="bg-gray-900 text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg">本书已结案</div> : (<>
+          {isCompleted && <div className="bg-gray-900 text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg">本书已结案</div>}
+          {isAbandoned && <div className="bg-red-100 text-red-800 px-4 py-2 rounded-full text-sm font-medium shadow-lg">已放弃阅读</div>}
+          {!isCompleted && !isAbandoned && (<>
+            <Button variant="outline" size="sm" onClick={handleAbandon} className="border-red-200 text-red-600 hover:bg-red-50 shadow-lg rounded-full">
+              <Flag className="w-4 h-4 mr-1" />放弃阅读
+            </Button>
             <Link href={`/books/${bookId}/action`}><Button size="sm" className="bg-gray-800 text-white hover:bg-gray-700 shadow-lg rounded-full"><Flag className="w-4 h-4 mr-1" />完结并生成行动清单</Button></Link>
             <Link href={`/books/${bookId}/review`}><Button size="lg" className="bg-black text-white hover:bg-gray-800 shadow-lg rounded-full"><Plus className="w-5 h-5 mr-2" />添加章节复盘</Button></Link>
           </>)}

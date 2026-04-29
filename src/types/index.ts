@@ -1,8 +1,8 @@
-export type BookStatus = 'to-read' | 'in-progress' | 'completed'
+export type BookStatus = 'to-read' | 'in-progress' | 'completed' | 'abandoned'
 
 export type ReadingMode = 'skim' | 'deep'
 
-export type BookGenre = 'philosophy' | 'science' | 'business' | 'literature'
+export type BookGenre = 'self-improvement' | 'investment' | 'tech' | 'humanities' | 'literature' | 'tools'
 
 export const READING_MODE_LABELS: Record<ReadingMode, string> = {
   'skim': '粗读模式',
@@ -10,10 +10,12 @@ export const READING_MODE_LABELS: Record<ReadingMode, string> = {
 }
 
 export const BOOK_GENRE_LABELS: Record<BookGenre, string> = {
-  'philosophy': '哲学/社科',
-  'science': '硬科学/数学',
-  'business': '商业/工具',
+  'self-improvement': '自我成长',
+  'investment': '投资理财',
+  'tech': '科技/技术',
+  'humanities': '人文/历史',
   'literature': '文学/小说',
+  'tools': '工具/方法论',
 }
 
 export interface DailyPlan {
@@ -95,4 +97,21 @@ export interface GatekeeperResult {
   passed: boolean
   feedback: string
   actionable_advice: string
+}
+
+export interface SearchResult {
+  id: string
+  title: string
+  authors: string[]
+  coverUrl?: string
+  description?: string
+  publisher?: string
+  source: 'google' | 'douban'
+}
+
+export interface AIRecommendation {
+  core_questions: string[]
+  suggested_genre: BookGenre
+  reading_suggestion: string
+  target_audience: string
 }

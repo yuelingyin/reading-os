@@ -11,7 +11,8 @@ import type { Book, BookStatus, Category } from '@/types'
 const statusMap: Record<BookStatus, { label: string; className: string }> = {
   'to-read': { label: '待阅读', className: 'bg-gray-100 text-gray-800' },
   'in-progress': { label: '阅读中', className: 'bg-black text-white' },
-  completed: { label: '已读完', className: 'bg-gray-400 text-white' },
+  'completed': { label: '已读完', className: 'bg-gray-400 text-white' },
+  'abandoned': { label: '已放弃', className: 'bg-red-100 text-red-800' },
 }
 
 export default async function DashboardPage() {
