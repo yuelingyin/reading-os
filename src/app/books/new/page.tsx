@@ -194,9 +194,13 @@ export default function NewBookPage() {
   }
 
   const runAIAnalysis = async (mode: 'goal' | 'direct') => {
-    if (!title.trim()) return
+    if (!title.trim()) {
+      setSearchError('请先选择一本书')
+      return
+    }
     setIsAnalyzing(true)
     setAiRecommendation(null)
+    setSearchError(null)
 
     // Get settings from localStorage
     const stored = localStorage.getItem('reading-os-settings')
@@ -425,6 +429,10 @@ export default function NewBookPage() {
               {author && <p className="text-sm text-gray-500">{author}</p>}
             </CardContent>
           </Card>
+
+          {searchError && (
+            <p className="text-sm text-red-500 mb-4">{searchError}</p>
+          )}
 
           <p className="text-gray-600 mb-4">让 AI 帮你设置阅读目标和核心问题？</p>
 
