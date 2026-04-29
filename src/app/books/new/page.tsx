@@ -259,13 +259,21 @@ export default function NewBookPage() {
     console.log('handleSubmit called', { title, userId, isLoading })
     if (!title.trim() || !userId) {
       console.log('early return: title=', title, 'userId=', userId)
+      alert('标题或用户信息不完整')
       return
     }
     const filteredQuestions = coreQuestions.filter(q => q.trim() !== '')
     setIsLoading(true)
+    console.log('Creating Supabase client...')
     const supabase = createClient()
-    console.log('Inserting book...')
-    const { error } = await supabase.from('books').insert({
+    console.log('Inserting book with:', { user_id: userId, title: title.trim() })
+
+    // Add timeout
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('请求超时，请检查网络连接')), 15000)
+    )
+
+    const insertPromise = supabase.from('books').insert({
       user_id: userId,
       title: title.trim(),
       author: author.trim() || null,
@@ -277,13 +285,25 @@ export default function NewBookPage() {
       category_id: categoryId || null,
       status: 'to-read',
     })
+
+    let insertResult
+    try {
+      insertResult = await Promise.race([insertPromise, timeoutPromise])
+    } catch (err: any) {
+      console.error('Insert error:', err)
+      alert(err.message || '插入失败')
+      setIsLoading(false)
+      return
+    }
+
+    const { error } = insertResult as { error: any }
     console.log('Insert result, error=', error)
     setIsLoading(false)
     if (!error) {
       console.log('Success, redirecting...')
       router.push('/dashboard')
     } else {
-      console.log('Error occurred:', error)
+      alert('创建失败: ' + (error.message || '未知错误'))
     }
   }
 
