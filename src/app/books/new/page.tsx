@@ -76,10 +76,12 @@ export default function NewBookPage() {
       const result = await analyzeBookForUser(title.trim(), undefined, 'FIND_BOOK_OPTIONS')
 
       if (result.success && result.recommendation) {
-        // AI returns book info in reading_suggestion: "书名：XXX，作者：XXX"
-        // target_audience contains possible authors
+        // Debug: show what AI returned
         const suggestion = result.recommendation.reading_suggestion || ''
         const targetAudience = result.recommendation.target_audience || ''
+
+        // Show debug alert so we can see what AI returned
+        alert(`AI 返回:\nreading_suggestion: ${suggestion}\ntarget_audience: ${targetAudience}`)
 
         const options: BookOption[] = []
 
