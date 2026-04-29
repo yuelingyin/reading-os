@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { createClient } from '@/lib/supabase/client'
 import { analyzeBookForUser } from '@/lib/book-actions'
+import { APIConfigBanner } from '@/components/api-config-banner'
 import type { Category, ReadingMode, BookGenre, AIRecommendation } from '@/types'
 import { READING_MODE_LABELS, BOOK_GENRE_LABELS } from '@/types'
 
@@ -183,6 +184,8 @@ export default function NewBookPage() {
             <BookMarked className="w-8 h-8" />
             <h1 className="text-2xl font-bold tracking-tight">记录一本书</h1>
           </div>
+
+          <APIConfigBanner />
 
           <Card className="mb-6">
             <CardContent className="pt-6 space-y-4">
