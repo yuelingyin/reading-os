@@ -61,15 +61,24 @@ export async function POST(request: NextRequest) {
     if (mode === 'FIND_BOOK_OPTIONS') {
       prompt = `用户输入了书名："${title}"
 
-请根据这个书名，返回最匹配的书籍信息。
+请根据这个书名，返回最匹配的书籍信息。如果有多个相似的书，都列出来。
 
-返回严格的JSON格式（不要有任何其他文字）：
+返回严格的JSON格式示例：
 {
-  "core_questions": [],
-  "suggested_genre": "self-improvement",
-  "reading_suggestion": "书名：XXX，作者：XXX",
-  "target_audience": "作者名"
-}`
+  "options": [
+    {"title": "书名A", "author": "作者A", "year": "2020"},
+    {"title": "书名B", "author": "作者B", "year": "2019"}
+  ],
+  "reading_suggestion": "找到X本书",
+  "target_audience": ""
+}
+
+注意：
+- 返回多个选项用 options 数组
+- 如果只有一本书，只返回一个
+- 如果不确定作者，写"作者未知"
+- year 是出版年份（如果知道的话）
+- 不要在JSON前后添加任何内容`
     } else if (mode === 'goal' && body.userGoal) {
       prompt = `用户的目标/困惑是："${body.userGoal}"
 
@@ -100,7 +109,7 @@ export async function POST(request: NextRequest) {
     }
 
     const response = await openai.chat.completions.create({
-      model: config.model,
+      model: config.model || 'gpt-4o-mini',
       messages: [
         { role: 'system', content: '你是一位资深阅读顾问。非常重要：你只能返回纯JSON格式，不要在JSON前后添加任何其他内容，不要使用思考标签，不要使用markdown格式。输出格式：{"core_questions":[],"suggested_genre":"...","reading_suggestion":"...","target_audience":"..."}' },
         { role: 'user', content: prompt },
@@ -137,8 +146,9 @@ export async function POST(request: NextRequest) {
       recommendation: {
         core_questions: result.core_questions || [],
         suggested_genre: result.suggested_genre || 'self-improvement',
-        reading_suggestion: result.reading_suggestion || '',
-        target_audience: result.target_audience || '',
+        reading_suggestion: result.reading_suggestion || result.options?.[0]?.title || '',
+        target_audience: result.options?.map((o: any) => o.author || '作者未知').join('、') || result.target_audience || '',
+        options: result.options || [],
       },
     })
   } catch (e: any) {

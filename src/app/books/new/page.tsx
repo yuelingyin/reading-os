@@ -105,20 +105,34 @@ export default function NewBookPage() {
       if (result.success && result.recommendation) {
         const suggestion = result.recommendation.reading_suggestion || ''
         const targetAudience = result.recommendation.target_audience || ''
-
-        alert(`AI 返回:\nreading_suggestion: ${suggestion}\ntarget_audience: ${targetAudience}`)
+        const aiOptions = result.recommendation.options || []
 
         const options: BookOption[] = []
 
-        const bookMatch = suggestion.match(/书名[：:]\s*(.+?)，?\s*作者[：:]\s*(.+)/)
-        if (bookMatch) {
-          options.push({
-            title: bookMatch[1].trim(),
-            author: bookMatch[2].trim() || '作者未知',
-            description: suggestion,
+        // Use options from AI if available
+        if (aiOptions.length > 0) {
+          aiOptions.forEach((opt: any) => {
+            options.push({
+              title: opt.title || title.trim(),
+              author: opt.author || '作者未知',
+              description: opt.year ? `${opt.year}年出版` : suggestion,
+            })
           })
         }
 
+        // Fallback: parse from suggestion
+        if (options.length === 0 && suggestion.includes('书名')) {
+          const bookMatch = suggestion.match(/书名[：:]\s*(.+?)，?\s*作者[：:]\s*(.+)/)
+          if (bookMatch) {
+            options.push({
+              title: bookMatch[1].trim(),
+              author: bookMatch[2].trim() || '作者未知',
+              description: suggestion,
+            })
+          }
+        }
+
+        // Fallback: use target_audience as author hint
         if (options.length === 0 && targetAudience) {
           options.push({
             title: title.trim(),
@@ -127,6 +141,7 @@ export default function NewBookPage() {
           })
         }
 
+        // Final fallback
         if (options.length === 0) {
           options.push({
             title: title.trim(),
@@ -136,6 +151,7 @@ export default function NewBookPage() {
         }
 
         setBookOptions(options)
+        setIsSearching(false)
         setStep('confirm')
       } else {
         setSearchError(result.error || '无法找到匹配的书籍')
