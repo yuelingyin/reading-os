@@ -4,23 +4,32 @@ import Link from 'next/link'
 import { Key, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { useState, useEffect } from 'react'
 
 const SETTINGS_KEY = 'reading-os-settings'
 
 export function APIConfigBanner() {
-  const isConfigured = (() => {
-    if (typeof window === 'undefined') return false
-    const stored = localStorage.getItem(SETTINGS_KEY)
-    if (!stored) return false
-    try {
-      const settings = JSON.parse(stored)
-      return settings.apiKey && settings.apiBaseUrl
-    } catch {
-      return false
-    }
-  })()
+  const [isConfigured, setIsConfigured] = useState<boolean | null>(null)
 
-  if (isConfigured) return null
+  useEffect(() => {
+    // Check localStorage for API config
+    const stored = localStorage.getItem(SETTINGS_KEY)
+    if (stored) {
+      try {
+        const settings = JSON.parse(stored)
+        setIsConfigured(!!(settings.apiKey && settings.apiBaseUrl))
+      } catch {
+        setIsConfigured(false)
+      }
+    } else {
+      setIsConfigured(false)
+    }
+  }, [])
+
+  // Don't show anything while checking, or if configured
+  if (isConfigured === null || isConfigured) {
+    return null
+  }
 
   return (
     <Card className="mb-6 border-yellow-300 bg-yellow-50">

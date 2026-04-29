@@ -76,38 +76,29 @@ export default function NewBookPage() {
       const result = await analyzeBookForUser(title.trim(), undefined, 'FIND_BOOK_OPTIONS')
 
       if (result.success && result.recommendation) {
-        // AI returns options in core_questions or reading_suggestion
-        // Parse AI response to get book options
+        // AI returns book info in reading_suggestion: "书名：XXX，作者：XXX"
+        // target_audience contains possible authors
         const suggestion = result.recommendation.reading_suggestion || ''
         const targetAudience = result.recommendation.target_audience || ''
 
-        // Try to parse AI response for book options
         const options: BookOption[] = []
 
-        // Check if suggestion contains book info
-        if (suggestion.includes('《')) {
-          const matches = suggestion.match(/《([^》]+)》[^《]*?(?:作者[：:]\s*([^\n，,。]+))?/g)
-          if (matches) {
-            matches.forEach(m => {
-              const titleMatch = m.match(/《([^》]+)》/)
-              const authorMatch = m.match(/作者[：:]\s*([^\n，,。]+)/)
-              if (titleMatch) {
-                options.push({
-                  title: titleMatch[1],
-                  author: authorMatch ? authorMatch[1].trim() : '作者未知',
-                  description: m.slice(0, 100),
-                })
-              }
-            })
-          }
+        // Parse "书名：XXX，作者：XXX" format
+        const bookMatch = suggestion.match(/书名[：:]\s*(.+?)，?\s*作者[：:]\s*(.+)/)
+        if (bookMatch) {
+          options.push({
+            title: bookMatch[1].trim(),
+            author: bookMatch[2].trim() || '作者未知',
+            description: suggestion,
+          })
         }
 
-        // Fallback: if no options parsed, use target_audience
+        // Fallback: if no book info, use target_audience as author hint
         if (options.length === 0 && targetAudience) {
           options.push({
             title: title.trim(),
-            author: targetAudience.split('、')[0] || '作者未知',
-            description: targetAudience,
+            author: targetAudience || '作者未知',
+            description: suggestion || targetAudience,
           })
         }
 
