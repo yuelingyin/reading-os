@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Key, Eye, EyeOff, Save, Globe } from 'lucide-react'
+import { ArrowLeft, Key, Eye, EyeOff, Save, Globe, RefreshCw, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -38,16 +38,24 @@ const AI_PROVIDERS = [
   },
 ]
 
+interface ModelInfo {
+  id: string
+  object: string
+}
+
 export default function SettingsPage() {
   const router = useRouter()
   const [userId, setUserId] = useState<string | null>(null)
   const [apiProvider, setApiProvider] = useState<string>('openai')
   const [apiBaseUrl, setApiBaseUrl] = useState<string>('https://api.openai.com/v1')
   const [apiKey, setApiKey] = useState('')
-  const [aiModel, setAiModel] = useState<string>('gpt-4o')
+  const [aiModel, setAiModel] = useState<string>('')
   const [customModel, setCustomModel] = useState<string>('')
   const [showKey, setShowKey] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isFetchingModels, setIsFetchingModels] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
+  const [availableModels, setAvailableModels] = useState<string[]>([])
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const currentProvider = AI_PROVIDERS.find(p => p.id === apiProvider)
@@ -68,7 +76,10 @@ export default function SettingsPage() {
           }
           if (data.ai_base_url) setApiBaseUrl(data.ai_base_url)
           if (data.openai_api_key) setApiKey(data.openai_api_key)
-          if (data.ai_model) setAiModel(data.ai_model)
+          if (data.ai_model) {
+            setAiModel(data.ai_model)
+            setCustomModel(data.ai_model)
+          }
         }
       })
     })
@@ -76,12 +87,54 @@ export default function SettingsPage() {
 
   const handleProviderChange = (providerId: string) => {
     setApiProvider(providerId)
+    setAvailableModels([])
+    setAiModel('')
+    setCustomModel('')
     const provider = AI_PROVIDERS.find(p => p.id === providerId)
     if (provider) {
       setApiBaseUrl(provider.baseUrl)
       if (provider.models.length > 0) {
-        setAiModel(provider.models[0])
+        setAvailableModels(provider.models)
       }
+    }
+  }
+
+  const fetchModels = async () => {
+    if (!apiKey.trim() || !apiBaseUrl.trim()) {
+      setFetchError('请先填写 API 地址和 Key')
+      return
+    }
+
+    setIsFetchingModels(true)
+    setFetchError(null)
+
+    try {
+      // Call our API route to fetch models (to avoid CORS issues)
+      const response = await fetch('/api/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: apiKey.trim(),
+          baseUrl: apiBaseUrl.trim(),
+          provider: apiProvider,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || '获取模型列表失败')
+      }
+
+      setAvailableModels(data.models || [])
+      if (data.models && data.models.length > 0) {
+        setAiModel(data.models[0])
+        setCustomModel(data.models[0])
+      }
+    } catch (e: any) {
+      setFetchError(e.message || '获取模型列表失败')
+    } finally {
+      setIsFetchingModels(false)
     }
   }
 
@@ -156,12 +209,6 @@ export default function SettingsPage() {
                     className="pl-10"
                   />
                 </div>
-                <p className="text-xs text-gray-400">
-                  {currentProvider?.id === 'google' && 'Google Gemini API 地址'}
-                  {currentProvider?.id === 'openai' && 'OpenAI API 地址'}
-                  {currentProvider?.id === 'azure' && 'Azure OpenAI 端点地址'}
-                  {currentProvider?.id === 'custom' && '填写你的自定义 API 地址（支持 OpenAI 兼容格式）'}
-                </p>
               </div>
 
               {/* API Key */}
@@ -186,34 +233,94 @@ export default function SettingsPage() {
                 </div>
               </div>
 
+              {/* Fetch Models Button */}
+              <div className="space-y-2">
+                <Label>AI 模型</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={fetchModels}
+                    disabled={isFetchingModels || !apiKey.trim() || !apiBaseUrl.trim()}
+                  >
+                    {isFetchingModels ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                    )}
+                    拉取模型
+                  </Button>
+                  {fetchError && (
+                    <span className="text-sm text-red-500">{fetchError}</span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400">
+                  点击拉取可用模型，或选择预设模型，或手动输入模型名称
+                </p>
+              </div>
+
               {/* Model Selection */}
               <div className="space-y-3">
-                <Label>AI 模型</Label>
-                {currentProvider && currentProvider.models.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {currentProvider.models.map((model) => (
-                      <button
-                        key={model}
-                        type="button"
-                        onClick={() => setAiModel(model)}
-                        className={`p-3 rounded-lg border text-sm transition-colors ${
-                          aiModel === model
-                            ? 'border-black bg-gray-50 font-medium'
-                            : 'border-gray-200 hover:border-gray-400'
-                        }`}
-                      >
-                        {model}
-                      </button>
-                    ))}
-                  </div>
+                {availableModels.length > 0 ? (
+                  <>
+                    <Label>可用模型（点击选择）</Label>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+                      {availableModels.map((model) => (
+                        <button
+                          key={model}
+                          type="button"
+                          onClick={() => { setAiModel(model); setCustomModel(model) }}
+                          className={`p-2 rounded-lg border text-sm transition-colors truncate ${
+                            aiModel === model
+                              ? 'border-black bg-gray-50 font-medium'
+                              : 'border-gray-200 hover:border-gray-400'
+                          }`}
+                          title={model}
+                        >
+                          {model}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : currentProvider && currentProvider.models.length > 0 ? (
+                  <>
+                    <Label>预设模型</Label>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      {currentProvider.models.map((model) => (
+                        <button
+                          key={model}
+                          type="button"
+                          onClick={() => { setAiModel(model); setCustomModel(model) }}
+                          className={`p-2 rounded-lg border text-sm transition-colors ${
+                            aiModel === model
+                              ? 'border-black bg-gray-50 font-medium'
+                              : 'border-gray-200 hover:border-gray-400'
+                          }`}
+                        >
+                          {model}
+                        </button>
+                      ))}
+                    </div>
+                  </>
                 ) : (
-                  <Input
-                    placeholder="例如：gpt-4o, gemini-1.5-flash"
-                    value={customModel}
-                    onChange={(e) => setCustomModel(e.target.value)}
-                  />
+                  <>
+                    <Label>手动输入模型名称</Label>
+                    <Input
+                      placeholder="例如：gpt-4o, gemini-1.5-flash"
+                      value={customModel}
+                      onChange={(e) => { setCustomModel(e.target.value); setAiModel(e.target.value) }}
+                    />
+                  </>
                 )}
               </div>
+
+              {/* Current Selection Display */}
+              {(aiModel || customModel) && (
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <span className="text-sm text-gray-500">当前选择：</span>
+                  <span className="text-sm font-medium ml-2">{aiModel || customModel}</span>
+                </div>
+              )}
 
               <Separator />
 
