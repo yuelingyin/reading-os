@@ -109,7 +109,7 @@ export interface SearchResult {
   coverUrl?: string
   description?: string
   publisher?: string
-  source: 'google' | 'douban'
+  source: string
 }
 
 export interface AIRecommendation {

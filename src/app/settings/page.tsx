@@ -12,16 +12,30 @@ import { Separator } from '@/components/ui/separator'
 import { createClient } from '@/lib/supabase/client'
 
 const AI_PROVIDERS = [
-  { id: 'openai', name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', defaultModel: 'gpt-4o' },
-  { id: 'azure', name: 'Azure OpenAI', baseUrl: '', defaultModel: 'gpt-4o' },
-  { id: 'custom', name: '自定义 (OpenAI 兼容)', baseUrl: '', defaultModel: 'gpt-4o' },
-]
-
-const MODELS = [
-  { id: 'gpt-4o', name: 'GPT-4o' },
-  { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
-  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo' },
-  { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
+  {
+    id: 'openai',
+    name: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1',
+    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+  },
+  {
+    id: 'google',
+    name: 'Google Gemini',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    models: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro'],
+  },
+  {
+    id: 'azure',
+    name: 'Azure OpenAI',
+    baseUrl: '',
+    models: ['gpt-4o', 'gpt-4-turbo', 'gpt-35-turbo'],
+  },
+  {
+    id: 'custom',
+    name: '自定义 API',
+    baseUrl: '',
+    models: [],
+  },
 ]
 
 export default function SettingsPage() {
@@ -31,20 +45,27 @@ export default function SettingsPage() {
   const [apiBaseUrl, setApiBaseUrl] = useState<string>('https://api.openai.com/v1')
   const [apiKey, setApiKey] = useState('')
   const [aiModel, setAiModel] = useState<string>('gpt-4o')
+  const [customModel, setCustomModel] = useState<string>('')
   const [showKey, setShowKey] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  const currentProvider = AI_PROVIDERS.find(p => p.id === apiProvider)
 
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) { router.push('/login'); return }
       setUserId(user.id)
-      // Load existing settings
       supabase.from('profiles').select('*').eq('id', user.id).single().then(({ data }) => {
         if (data) {
-          if (data.ai_provider) setApiProvider(data.ai_provider)
+          if (data.ai_provider) {
+            setApiProvider(data.ai_provider)
+            const provider = AI_PROVIDERS.find(p => p.id === data.ai_provider)
+            if (provider) {
+              setApiBaseUrl(data.ai_base_url || provider.baseUrl)
+            }
+          }
           if (data.ai_base_url) setApiBaseUrl(data.ai_base_url)
           if (data.openai_api_key) setApiKey(data.openai_api_key)
           if (data.ai_model) setAiModel(data.ai_model)
@@ -53,11 +74,14 @@ export default function SettingsPage() {
     })
   }, [router])
 
-  const handleProviderChange = (provider: string) => {
-    setApiProvider(provider)
-    const preset = AI_PROVIDERS.find(p => p.id === provider)
-    if (preset && preset.baseUrl) {
-      setApiBaseUrl(preset.baseUrl)
+  const handleProviderChange = (providerId: string) => {
+    setApiProvider(providerId)
+    const provider = AI_PROVIDERS.find(p => p.id === providerId)
+    if (provider) {
+      setApiBaseUrl(provider.baseUrl)
+      if (provider.models.length > 0) {
+        setAiModel(provider.models[0])
+      }
     }
   }
 
@@ -67,12 +91,13 @@ export default function SettingsPage() {
     setIsSaving(true)
     setMessage(null)
     const supabase = createClient()
+    const finalModel = apiProvider === 'custom' ? customModel : aiModel
     const { error } = await supabase.from('profiles').upsert({
       id: userId,
       ai_provider: apiProvider,
       ai_base_url: apiBaseUrl.trim() || null,
       openai_api_key: apiKey.trim() || null,
-      ai_model: aiModel,
+      ai_model: finalModel,
     })
     setIsSaving(false)
     if (error) {
@@ -98,9 +123,9 @@ export default function SettingsPage() {
           <CardContent className="pt-6">
             <form onSubmit={handleSave} className="space-y-6">
               {/* AI Provider */}
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <Label>AI 提供商</Label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                   {AI_PROVIDERS.map((provider) => (
                     <button
                       key={provider.id}
@@ -121,7 +146,6 @@ export default function SettingsPage() {
               {/* API Base URL */}
               <div className="space-y-2">
                 <Label htmlFor="apiBaseUrl">API 地址</Label>
-                <p className="text-sm text-gray-500">AI 服务的 API 端点地址</p>
                 <div className="relative">
                   <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <Input
@@ -132,17 +156,22 @@ export default function SettingsPage() {
                     className="pl-10"
                   />
                 </div>
+                <p className="text-xs text-gray-400">
+                  {currentProvider?.id === 'google' && 'Google Gemini API 地址'}
+                  {currentProvider?.id === 'openai' && 'OpenAI API 地址'}
+                  {currentProvider?.id === 'azure' && 'Azure OpenAI 端点地址'}
+                  {currentProvider?.id === 'custom' && '填写你的自定义 API 地址（支持 OpenAI 兼容格式）'}
+                </p>
               </div>
 
               {/* API Key */}
               <div className="space-y-2">
-                <Label htmlFor="apiKey">API Key (BYOK)</Label>
-                <p className="text-sm text-gray-500">用于 AI 守门员和预读功能验证精读成果</p>
+                <Label htmlFor="apiKey">API Key</Label>
                 <div className="relative">
                   <Input
                     id="apiKey"
                     type={showKey ? 'text' : 'password'}
-                    placeholder="sk-..."
+                    placeholder={apiProvider === 'google' ? 'AIza...' : 'sk-...'}
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     className="pr-20"
@@ -158,24 +187,32 @@ export default function SettingsPage() {
               </div>
 
               {/* Model Selection */}
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <Label>AI 模型</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {MODELS.map((model) => (
-                    <button
-                      key={model.id}
-                      type="button"
-                      onClick={() => setAiModel(model.id)}
-                      className={`p-3 rounded-lg border text-sm transition-colors ${
-                        aiModel === model.id
-                          ? 'border-black bg-gray-50 font-medium'
-                          : 'border-gray-200 hover:border-gray-400'
-                      }`}
-                    >
-                      {model.name}
-                    </button>
-                  ))}
-                </div>
+                {currentProvider && currentProvider.models.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {currentProvider.models.map((model) => (
+                      <button
+                        key={model}
+                        type="button"
+                        onClick={() => setAiModel(model)}
+                        className={`p-3 rounded-lg border text-sm transition-colors ${
+                          aiModel === model
+                            ? 'border-black bg-gray-50 font-medium'
+                            : 'border-gray-200 hover:border-gray-400'
+                        }`}
+                      >
+                        {model}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <Input
+                    placeholder="例如：gpt-4o, gemini-1.5-flash"
+                    value={customModel}
+                    onChange={(e) => setCustomModel(e.target.value)}
+                  />
+                )}
               </div>
 
               <Separator />

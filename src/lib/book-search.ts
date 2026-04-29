@@ -1,189 +1,156 @@
 import type { SearchResult } from '@/types'
 
 // Google Books search
-export async function searchGoogleBooks(query: string): Promise<SearchResult[]> {
+async function searchGoogleBooks(query: string): Promise<SearchResult[]> {
   if (!query.trim()) return []
-
   try {
     const res = await fetch(
       `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=10&langRestrict=zh-CN`
     )
     const data = await res.json()
     if (!data.items) return []
-
     return data.items.map((item: any) => ({
-      id: item.id,
+      id: `google-${item.id}`,
       title: item.volumeInfo.title || 'Unknown',
       authors: item.volumeInfo.authors || [],
       coverUrl: item.volumeInfo.imageLinks?.thumbnail?.replace('http://', 'https://'),
       description: item.volumeInfo.description,
       publisher: item.volumeInfo.publisher,
-      source: 'google' as const,
+      source: 'Google Books',
     }))
-  } catch {
-    return []
-  }
+  } catch { return [] }
 }
 
 // Open Library search
-export async function searchOpenLibrary(query: string): Promise<SearchResult[]> {
+async function searchOpenLibrary(query: string): Promise<SearchResult[]> {
   if (!query.trim()) return []
-
   try {
     const res = await fetch(
       `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=10`
     )
     const data = await res.json()
     if (!data.docs) return []
-
     return data.docs.slice(0, 10).map((item: any) => ({
       id: `ol-${item.key?.replace('/works/', '')}`,
       title: item.title || 'Unknown',
       authors: item.author_name || [],
-      coverUrl: item.cover_i
-        ? `https://covers.openlibrary.org/b/id/${item.cover_i}-M.jpg`
-        : undefined,
-      description: item.first_publish_year ? `Published: ${item.first_publish_year}` : undefined,
+      coverUrl: item.cover_i ? `https://covers.openlibrary.org/b/id/${item.cover_i}-M.jpg` : undefined,
+      description: item.first_sentence?.[0] || item.first_publish_year ? `Published: ${item.first_publish_year}` : undefined,
       publisher: item.publisher?.[0],
-      source: 'openlibrary' as const,
+      source: 'Open Library',
     }))
-  } catch {
-    return []
-  }
+  } catch { return [] }
 }
 
-// Douban search via CORS proxy alternative
-export async function searchDouban(query: string): Promise<SearchResult[]> {
+// Douban search (via web scraping)
+async function searchDouban(query: string): Promise<SearchResult[]> {
   if (!query.trim()) return []
-
   try {
-    // Using a CORS proxy or direct search
     const res = await fetch(
-      `https://api.douban.com/v2/book/search?q=${encodeURIComponent(query)}&count=10`,
-      {
-        headers: {
-          'Accept': 'application/json',
-        },
-      }
+      `https://www.douban.com/search?cat=1001&q=${encodeURIComponent(query)}`,
+      { headers: { 'Accept': 'application/json' } }
     )
     if (!res.ok) return []
-
-    const data = await res.json()
-    if (!data.books || data.books.length === 0) return []
-
-    return data.books.map((item: any) => ({
-      id: `douban-${item.id}`,
-      title: item.title || 'Unknown',
-      authors: item.author || [],
-      coverUrl: item.image?.replace('http://', 'https://'),
-      description: item.publisher,
-      publisher: item.publisher,
-      source: 'douban' as const,
-    }))
-  } catch {
-    return []
-  }
+    const html = await res.text()
+    const titleRegex = /class="title">([^<]+)/g
+    const matches: SearchResult[] = []
+    let match
+    let i = 0
+    while ((match = titleRegex.exec(html)) !== null && i < 8) {
+      matches.push({
+        id: `douban-${i++}`,
+        title: match[1],
+        authors: [],
+        source: '豆瓣',
+      })
+    }
+    return matches
+  } catch { return [] }
 }
 
-// Goodreads search via Open Library as fallback
-export async function searchGoodreads(query: string): Promise<SearchResult[]> {
+// Goodreads search (via Open Library)
+async function searchGoodreads(query: string): Promise<SearchResult[]> {
   if (!query.trim()) return []
-
   try {
-    // Goodreads doesn't have a public API, so we use Open Library with more aggressive params
     const res = await fetch(
-      `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=10&fields=key,title,author_name,cover_i,first_publish_year,publisher`
+      `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=10&fields=key,title,author_name,cover_i,first_publish_year,publisher,isbn`
     )
     const data = await res.json()
     if (!data.docs) return []
-
     return data.docs.map((item: any) => ({
-      id: `gr-${item.key?.replace('/works/', '')}`,
+      id: `goodreads-${item.key?.replace('/works/', '')}`,
       title: item.title || 'Unknown',
       authors: item.author_name || [],
-      coverUrl: item.cover_i
-        ? `https://covers.openlibrary.org/b/id/${item.cover_i}-M.jpg`
-        : undefined,
+      coverUrl: item.cover_i ? `https://covers.openlibrary.org/b/id/${item.cover_i}-M.jpg` : undefined,
       description: item.first_publish_year ? `First published: ${item.first_publish_year}` : undefined,
       publisher: item.publisher?.[0],
-      source: 'goodreads' as const,
+      source: 'Goodreads',
     }))
-  } catch {
-    return []
-  }
+  } catch { return [] }
 }
 
-// Thirtysixes search
-export async function searchThirtysixes(query: string): Promise<SearchResult[]> {
+// ISBN search
+async function searchISBN(query: string): Promise<SearchResult[]> {
   if (!query.trim()) return []
-
   try {
     const res = await fetch(
-      `https://www.36functions.com/openapi/book/search?keyword=${encodeURIComponent(query)}&pageSize=10`
+      `https://openlibrary.org/api/books?bibkeys=ISBN:${query}&format=json&jscmd=data`
     )
-    if (!res.ok) return []
     const data = await res.json()
-    if (!data.data?.items) return []
-
-    return data.data.items.map((item: any) => ({
-      id: `36-${item.isbn}`,
-      title: item.title || 'Unknown',
-      authors: item.authors || [],
-      coverUrl: item.coverUrl,
-      description: item.description,
-      publisher: item.publisher,
-      source: 'thirtysixes' as const,
-    }))
-  } catch {
-    return []
-  }
+    const key = `ISBN:${query}`
+    if (!data[key]) return []
+    const book = data[key]
+    return [{
+      id: `isbn-${query}`,
+      title: book.title || 'Unknown',
+      authors: book.authors?.map((a: any) => a.name) || [],
+      coverUrl: book.cover?.medium?.replace('http://', 'https://'),
+      description: book.notes,
+      publisher: book.publishers?.[0]?.name,
+      source: 'ISBN',
+    }]
+  } catch { return [] }
 }
 
-// Unified search - combines multiple sources
+// Unified search - combines all sources
 export async function searchBooks(query: string): Promise<SearchResult[]> {
   if (!query.trim()) return []
 
   // Run all searches in parallel
-  const [googleResults, openLibraryResults, doubanResults] = await Promise.allSettled([
+  const results = await Promise.allSettled([
     searchGoogleBooks(query),
     searchOpenLibrary(query),
     searchDouban(query),
+    searchGoodreads(query),
   ])
 
-  const googleData = googleResults.status === 'fulfilled' ? googleResults.value : []
-  const openLibraryData = openLibraryResults.status === 'fulfilled' ? openLibraryResults.value : []
-  const doubanData = doubanResults.status === 'fulfilled' ? doubanResults.value : []
-
-  // Combine and deduplicate by title (case-insensitive)
+  const allResults: SearchResult[] = []
   const seen = new Set<string>()
-  const combined: SearchResult[] = []
 
-  // Add Douban results first (often better for Chinese books)
-  for (const result of doubanData) {
-    const key = result.title.toLowerCase()
-    if (!seen.has(key)) {
-      seen.add(key)
-      combined.push(result)
+  // Process and merge results
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      for (const book of result.value) {
+        const key = `${book.title.toLowerCase()}-${book.authors.join(',').toLowerCase()}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          allResults.push(book)
+        }
+      }
     }
   }
 
-  // Add Open Library results
-  for (const result of openLibraryData) {
-    const key = result.title.toLowerCase()
-    if (!seen.has(key)) {
-      seen.add(key)
-      combined.push(result)
+  // Deduplicate by title similarity
+  const deduped: SearchResult[] = []
+  const titleSeen = new Set<string>()
+
+  for (const book of allResults) {
+    const normalizedTitle = book.title.toLowerCase().replace(/[^a-z0-9]/g, '')
+    if (!titleSeen.has(normalizedTitle)) {
+      titleSeen.add(normalizedTitle)
+      deduped.push(book)
     }
   }
 
-  // Add Google results, skipping duplicates
-  for (const result of googleData) {
-    const key = result.title.toLowerCase()
-    if (!seen.has(key)) {
-      seen.add(key)
-      combined.push(result)
-    }
-  }
-
-  return combined.slice(0, 20)
+  return deduped.slice(0, 24)
 }
