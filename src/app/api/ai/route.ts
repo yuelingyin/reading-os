@@ -129,20 +129,37 @@ export async function POST(request: NextRequest) {
     content = content.replace(/```\s*/gi, '')
     content = content.trim()
 
+    // If content is just an array like "[{...}]", wrap it
+    if (content.startsWith('[')) {
+      try {
+        JSON.parse(content) // Verify it's valid array
+        content = `{"options":${content}}`
+      } catch {
+        // If not valid array either, try to extract JSON
+        const arrMatch = content.match(/\[[\s\S]*\]/)
+        if (arrMatch) {
+          content = `{"options":${arrMatch[0]}}`
+        }
+      }
+    }
+
     // Make sure content is valid JSON
+    let result
     try {
-      JSON.parse(content) // Just to verify
+      result = JSON.parse(content)
     } catch {
-      // If not valid JSON, try to extract JSON from the content
+      // If not valid JSON, try to extract JSON object from the content
       const jsonMatch = content.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
-        content = jsonMatch[0]
+        try {
+          result = JSON.parse(jsonMatch[0])
+        } catch {
+          throw new Error('AI 返回的不是有效的 JSON')
+        }
       } else {
         throw new Error('AI 返回的不是有效的 JSON')
       }
     }
-
-    const result = JSON.parse(content)
 
     return NextResponse.json({
       success: true,
