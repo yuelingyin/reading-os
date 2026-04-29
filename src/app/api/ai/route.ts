@@ -129,32 +129,41 @@ export async function POST(request: NextRequest) {
     content = content.replace(/```\s*/gi, '')
     content = content.trim()
 
-    // If content is just an array like "[{...}]", wrap it
-    if (content.startsWith('[')) {
-      try {
-        JSON.parse(content) // Verify it's valid array
-        content = `{"options":${content}}`
-      } catch {
-        // If not valid array either, try to extract JSON
-        const arrMatch = content.match(/\[[\s\S]*\]/)
-        if (arrMatch) {
-          content = `{"options":${arrMatch[0]}}`
-        }
-      }
-    }
+    let result: any = {}
 
-    // Make sure content is valid JSON
-    let result
+    // Try direct parse first
     try {
       result = JSON.parse(content)
     } catch {
-      // If not valid JSON, try to extract JSON object from the content
-      const jsonMatch = content.match(/\{[\s\S]*\}/)
-      if (jsonMatch) {
+      // Try to extract JSON array
+      const arrMatch = content.match(/\[[\s\S]*\]/)
+      if (arrMatch) {
         try {
-          result = JSON.parse(jsonMatch[0])
+          const arr = JSON.parse(arrMatch[0])
+          result = { options: arr }
         } catch {
-          throw new Error('AI 返回的不是有效的 JSON')
+          // Try to extract JSON object
+          const objMatch = content.match(/\{[\s\S]*\}/)
+          if (objMatch) {
+            try {
+              result = JSON.parse(objMatch[0])
+            } catch {
+              // Last resort: try to find key-value patterns
+              const titleMatch = content.match(/["']title["']\s*:\s*["']([^"']+)["']/i)
+              const authorMatch = content.match(/["']author["']\s*:\s*["']([^"']+)["']/i)
+              if (titleMatch) {
+                result = {
+                  options: [{ title: titleMatch[1], author: authorMatch?.[1] || '' }],
+                  reading_suggestion: '请确认书籍信息',
+                  target_audience: '通用'
+                }
+              } else {
+                throw new Error('AI 返回的不是有效的 JSON')
+              }
+            }
+          } else {
+            throw new Error('AI 返回的不是有效的 JSON')
+          }
         }
       } else {
         throw new Error('AI 返回的不是有效的 JSON')
