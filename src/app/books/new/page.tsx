@@ -528,7 +528,7 @@ export default function NewBookPage() {
           </Card>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={(e) => { e.preventDefault(); handleSubmit(e); }} className="space-y-6">
           {/* Reading Mode */}
           <div className="space-y-3">
             <Label>阅读模式</Label>
@@ -569,7 +569,7 @@ export default function NewBookPage() {
             </div>
           </div>
 
-          <Button type="submit" disabled={isLoading || !title.trim()} className="w-full bg-black text-white hover:bg-gray-800">
+          <Button type="button" onClick={(e) => { e.preventDefault(); handleSubmit(e as any); }} disabled={isLoading || !title.trim()} className="w-full bg-black text-white hover:bg-gray-800">
             {isLoading ? '创建中...' : '创建'}
           </Button>
           {(!title.trim() || !userId) && (
