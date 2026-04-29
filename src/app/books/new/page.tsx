@@ -279,7 +279,7 @@ export default function NewBookPage() {
       author: author.trim() || null,
       cover_url: coverUrl || null,
       reading_mode: readingMode,
-      // book_genre: bookGenre || null, // column not in DB yet
+      book_genre: bookGenre || null,
       reading_motivation: motivation.trim() || null,
       core_questions: filteredQuestions.length > 0 ? filteredQuestions : null,
       category_id: categoryId || null,
