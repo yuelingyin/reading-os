@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { BookOpen, Target, LogOut, Search } from 'lucide-react'
+import { BookOpen, Target, LogOut, Search, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -71,6 +71,7 @@ export function MainNav() {
           )}
           {isLoggedIn ? (
             <>
+              <Link href="/settings" className="text-sm text-gray-400 hover:text-black transition-colors"><Settings className="w-4 h-4" /></Link>
               <Link href="/books/new" className="text-sm text-gray-400 hover:text-black transition-colors">+ 新建</Link>
               <button onClick={handleLogout} className="flex items-center gap-1 text-sm text-gray-400 hover:text-black transition-colors"><LogOut className="w-4 h-4" /></button>
             </>

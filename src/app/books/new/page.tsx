@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { BookOpen, Plus, X, Search, Loader2 } from 'lucide-react'
+import { BookOpen, Plus, X, Search, Loader2, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -12,7 +12,8 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { createClient } from '@/lib/supabase/client'
 import { searchBooks, type GoogleBook } from '@/lib/google-books'
-import type { Category } from '@/types'
+import type { Category, ReadingMode, BookGenre } from '@/types'
+import { READING_MODE_LABELS, BOOK_GENRE_LABELS } from '@/types'
 
 export default function NewBookPage() {
   const router = useRouter()
@@ -22,6 +23,8 @@ export default function NewBookPage() {
   const [title, setTitle] = useState('')
   const [author, setAuthor] = useState('')
   const [coverUrl, setCoverUrl] = useState('')
+  const [readingMode, setReadingMode] = useState<ReadingMode>('skim')
+  const [bookGenre, setBookGenre] = useState<BookGenre | ''>('')
   const [motivation, setMotivation] = useState('')
   const [coreQuestions, setCoreQuestions] = useState<string[]>([''])
   const [categoryId, setCategoryId] = useState<string>('')
@@ -37,7 +40,6 @@ export default function NewBookPage() {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
         setUserId(user.id)
-        // Load categories
         supabase.from('categories').select('*').eq('user_id', user.id).then(({ data }) => {
           if (data) setCategories(data)
         })
@@ -75,7 +77,7 @@ export default function NewBookPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!title.trim() || !motivation.trim() || !userId) return
+    if (!title.trim() || !motivation.trim() || !userId || !bookGenre) return
     const filteredQuestions = coreQuestions.filter(q => q.trim() !== '')
     setIsLoading(true)
     const supabase = createClient()
@@ -84,6 +86,8 @@ export default function NewBookPage() {
       title: title.trim(),
       author: author.trim() || null,
       cover_url: coverUrl || null,
+      reading_mode: readingMode,
+      book_genre: bookGenre,
       reading_motivation: motivation.trim(),
       core_questions: filteredQuestions.length > 0 ? filteredQuestions : null,
       category_id: categoryId || null,
@@ -118,7 +122,6 @@ export default function NewBookPage() {
                 {isSearching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-gray-400" />}
               </div>
 
-              {/* Search Results Dropdown */}
               {showResults && searchResults.length > 0 && (
                 <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-80 overflow-y-auto">
                   {searchResults.map((book) => (
@@ -160,9 +163,57 @@ export default function NewBookPage() {
                 <Input id="author" placeholder="输入作者（选填）" value={author} onChange={(e) => setAuthor(e.target.value)} />
               </div>
 
+              {/* Reading Mode Selection */}
+              <div className="space-y-2">
+                <Label>阅读模式 <span className="text-red-500">*</span></Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setReadingMode('skim')}
+                    className={`p-4 rounded-lg border-2 text-left transition-colors ${readingMode === 'skim' ? 'border-black bg-gray-50' : 'border-gray-200 hover:border-gray-400'}`}
+                  >
+                    <p className="font-medium">粗读模式 (skim)</p>
+                    <p className="text-sm text-gray-500 mt-1">随意推进进度，无需 AI 验证</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReadingMode('deep')}
+                    className={`p-4 rounded-lg border-2 text-left transition-colors ${readingMode === 'deep' ? 'border-black bg-gray-50' : 'border-gray-200 hover:border-gray-400'}`}
+                  >
+                    <p className="font-medium">精读模式 (deep)</p>
+                    <p className="text-sm text-gray-500 mt-1">AI 守门员调考通过后才能解锁下一章</p>
+                  </button>
+                </div>
+                <div className="flex items-start gap-2 mt-2 p-3 bg-blue-50 rounded-lg">
+                  <Info className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
+                  <p className="text-xs text-blue-700">
+                    {readingMode === 'skim'
+                      ? '粗读模式可随意推进进度，快速扫描书籍内容。'
+                      : '精读模式必须通过 AI 调考才能解锁下一章，确保深度理解。'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Book Genre Selection */}
+              <div className="space-y-2">
+                <Label>书籍类型 <span className="text-red-500">*</span></Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(Object.entries(BOOK_GENRE_LABELS) as [BookGenre, string][]).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setBookGenre(key)}
+                      className={`p-3 rounded-lg border text-sm transition-colors ${bookGenre === key ? 'border-black bg-gray-50 font-medium' : 'border-gray-200 hover:border-gray-400'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {categories.length > 0 && (
                 <div className="space-y-2">
-                  <Label>分类</Label>
+                  <Label>分类（可选）</Label>
                   <div className="flex flex-wrap gap-2">
                     {categories.map((cat) => (
                       <button
@@ -199,7 +250,7 @@ export default function NewBookPage() {
               </div>
               <Separator />
               <div className="flex justify-end">
-                <Button type="submit" disabled={isLoading || !title.trim() || !motivation.trim() || !userId} className="bg-black text-white hover:bg-gray-800">{isLoading ? '创建中...' : '确认立项'}</Button>
+                <Button type="submit" disabled={isLoading || !title.trim() || !motivation.trim() || !userId || !bookGenre} className="bg-black text-white hover:bg-gray-800">{isLoading ? '创建中...' : '确认立项'}</Button>
               </div>
             </form>
           </CardContent>
