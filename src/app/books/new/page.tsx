@@ -572,6 +572,11 @@ export default function NewBookPage() {
           <Button type="submit" disabled={isLoading || !title.trim()} className="w-full bg-black text-white hover:bg-gray-800">
             {isLoading ? '创建中...' : '创建'}
           </Button>
+          {(!title.trim() || !userId) && (
+            <p className="text-xs text-red-500 mt-2 text-center">
+              {!title.trim() ? '标题为空' : ''} {!userId ? '请先登录' : ''}
+            </p>
+          )}
         </form>
       </div>
     </div>
