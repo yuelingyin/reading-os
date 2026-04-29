@@ -55,5 +55,3 @@ export interface ExtendedReading {
   is_read: boolean
   created_at: string
 }
-
-export type NewBook = Omit<Book, 'id' | 'created_at' | 'updated_at'>

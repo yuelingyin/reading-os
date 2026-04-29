@@ -7,11 +7,7 @@ export const metadata: Metadata = {
   description: '阅读决策与代谢系统',
 }
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh-CN">
       <body>
