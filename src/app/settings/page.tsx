@@ -9,7 +9,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
-import { createClient } from '@/lib/supabase/client'
 
 const AI_PROVIDERS = [
   {
@@ -38,14 +37,17 @@ const AI_PROVIDERS = [
   },
 ]
 
-interface ModelInfo {
-  id: string
-  object: string
+const SETTINGS_KEY = 'reading-os-settings'
+
+interface Settings {
+  apiProvider: string
+  apiBaseUrl: string
+  apiKey: string
+  aiModel: string
 }
 
 export default function SettingsPage() {
   const router = useRouter()
-  const [userId, setUserId] = useState<string | null>(null)
   const [apiProvider, setApiProvider] = useState<string>('openai')
   const [apiBaseUrl, setApiBaseUrl] = useState<string>('https://api.openai.com/v1')
   const [apiKey, setApiKey] = useState('')
@@ -60,30 +62,21 @@ export default function SettingsPage() {
 
   const currentProvider = AI_PROVIDERS.find(p => p.id === apiProvider)
 
+  // Load from localStorage on mount
   useEffect(() => {
-    const supabase = createClient()
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) { router.push('/login'); return }
-      setUserId(user.id)
-      supabase.from('profiles').select('*').eq('id', user.id).single().then(({ data }) => {
-        if (data) {
-          if (data.ai_provider) {
-            setApiProvider(data.ai_provider)
-            const provider = AI_PROVIDERS.find(p => p.id === data.ai_provider)
-            if (provider) {
-              setApiBaseUrl(data.ai_base_url || provider.baseUrl)
-            }
-          }
-          if (data.ai_base_url) setApiBaseUrl(data.ai_base_url)
-          if (data.openai_api_key) setApiKey(data.openai_api_key)
-          if (data.ai_model) {
-            setAiModel(data.ai_model)
-            setCustomModel(data.ai_model)
-          }
-        }
-      })
-    })
-  }, [router])
+    const stored = localStorage.getItem(SETTINGS_KEY)
+    if (stored) {
+      try {
+        const settings: Settings = JSON.parse(stored)
+        setApiProvider(settings.apiProvider || 'openai')
+        setApiBaseUrl(settings.apiBaseUrl || 'https://api.openai.com/v1')
+        setApiKey(settings.apiKey || '')
+        const model = settings.aiModel || ''
+        setAiModel(model)
+        setCustomModel(model)
+      } catch {}
+    }
+  }, [])
 
   const handleProviderChange = (providerId: string) => {
     setApiProvider(providerId)
@@ -109,7 +102,6 @@ export default function SettingsPage() {
     setFetchError(null)
 
     try {
-      // Call our API route to fetch models (to avoid CORS issues)
       const response = await fetch('/api/models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -140,24 +132,42 @@ export default function SettingsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!userId) return
     setIsSaving(true)
     setMessage(null)
-    const supabase = createClient()
+
     const finalModel = apiProvider === 'custom' ? customModel : aiModel
-    const { error } = await supabase.from('profiles').upsert({
-      id: userId,
-      ai_provider: apiProvider,
-      ai_base_url: apiBaseUrl.trim() || null,
-      openai_api_key: apiKey.trim() || null,
-      ai_model: finalModel,
-    })
-    setIsSaving(false)
-    if (error) {
-      setMessage({ type: 'error', text: '保存失败：' + error.message })
-    } else {
-      setMessage({ type: 'success', text: '设置已保存' })
+
+    const settings: Settings = {
+      apiProvider,
+      apiBaseUrl: apiBaseUrl.trim(),
+      apiKey: apiKey.trim(),
+      aiModel: finalModel,
     }
+
+    // Save to localStorage
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
+
+    // Also try to save to Supabase profiles table (but don't fail if it doesn't work)
+    try {
+      const { createClient } = await import('@/lib/supabase/client')
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        await supabase.from('profiles').upsert({
+          id: user.id,
+          ai_provider: apiProvider,
+          ai_base_url: apiBaseUrl.trim(),
+          openai_api_key: apiKey.trim(),
+          ai_model: finalModel,
+        })
+      }
+    } catch {}
+
+    setIsSaving(false)
+    setMessage({ type: 'success', text: '设置已保存到浏览器' })
+
+    // Reset message after 3 seconds
+    setTimeout(() => setMessage(null), 3000)
   }
 
   return (
@@ -254,9 +264,6 @@ export default function SettingsPage() {
                     <span className="text-sm text-red-500">{fetchError}</span>
                   )}
                 </div>
-                <p className="text-xs text-gray-400">
-                  点击拉取可用模型，或选择预设模型，或手动输入模型名称
-                </p>
               </div>
 
               {/* Model Selection */}
@@ -331,6 +338,7 @@ export default function SettingsPage() {
                       {message.text}
                     </p>
                   )}
+                  <p className="text-xs text-gray-400 mt-1">设置保存在浏览器本地，换设备需要重新填写</p>
                 </div>
                 <Button type="submit" disabled={isSaving} className="bg-black text-white hover:bg-gray-800">
                   <Save className="w-4 h-4 mr-2" />

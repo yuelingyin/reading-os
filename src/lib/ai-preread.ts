@@ -1,37 +1,69 @@
 import OpenAI from 'openai'
-import { createClient, getUser } from '@/lib/supabase/server'
+import { getUser } from '@/lib/supabase/server'
 import type { AIRecommendation, BookGenre } from '@/types'
+
+// Get AI config from Supabase or localStorage fallback
+async function getAIConfig() {
+  const user = await getUser()
+  if (!user) return null
+
+  // Try Supabase first
+  try {
+    const { createClient } = await import('@/lib/supabase/server')
+    const supabase = await createClient()
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('ai_provider, ai_base_url, openai_api_key, ai_model')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.openai_api_key && profile?.ai_base_url) {
+      return {
+        apiKey: profile.openai_api_key,
+        baseUrl: profile.ai_base_url,
+        model: profile.ai_model || 'gpt-4o',
+        provider: profile.ai_provider || 'openai',
+      }
+    }
+  } catch {}
+
+  // Fallback to localStorage (for users who can't save to Supabase)
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem('reading-os-settings')
+    if (stored) {
+      try {
+        const settings = JSON.parse(stored)
+        if (settings.apiKey && settings.apiBaseUrl) {
+          return {
+            apiKey: settings.apiKey,
+            baseUrl: settings.apiBaseUrl,
+            model: settings.aiModel || 'gpt-4o',
+            provider: settings.apiProvider || 'openai',
+          }
+        }
+      } catch {}
+    }
+  }
+
+  return null
+}
 
 export async function getAIRecommendation(
   bookTitle: string,
   author?: string,
   userGoal?: string
 ): Promise<{ success: boolean; recommendation?: AIRecommendation; error?: string }> {
-  const user = await getUser()
-  if (!user) return { success: false, error: 'Unauthorized' }
+  const config = await getAIConfig()
 
-  const supabase = await createClient()
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('ai_provider, ai_base_url, openai_api_key, ai_model')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile?.openai_api_key) {
-    return { success: false, error: '请先在设置中配置 OpenAI API Key' }
-  }
-
-  if (!profile?.ai_base_url) {
-    return { success: false, error: '请先在设置中配置 API 地址' }
+  if (!config) {
+    return { success: false, error: '请先在设置中配置 AI API' }
   }
 
   try {
     const openai = new OpenAI({
-      apiKey: profile.openai_api_key,
-      baseURL: profile.ai_base_url,
+      apiKey: config.apiKey,
+      baseURL: config.baseUrl,
     })
-
-    const model = profile.ai_model || 'gpt-4o'
 
     const prompt = userGoal
       ? `用户的目标/困惑是："${userGoal}"
@@ -61,7 +93,7 @@ export async function getAIRecommendation(
 }`
 
     const response = await openai.chat.completions.create({
-      model,
+      model: config.model,
       messages: [
         {
           role: 'system',
