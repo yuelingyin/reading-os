@@ -108,8 +108,8 @@ export async function POST(request: NextRequest) {
 }`
     }
 
-    // Use gpt-4o-mini for speed - it's much faster and cheaper
-    const model = config.model?.includes('mini') ? config.model : 'gpt-4o-mini'
+    // Use user's selected model
+    const model = config.model || 'gpt-4o-mini'
 
     const response = await openai.chat.completions.create({
       model: model,

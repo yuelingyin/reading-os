@@ -33,7 +33,7 @@ const AI_PROVIDERS = [
     id: 'minimax',
     name: 'MiniMax',
     baseUrl: 'https://minnimax.chat/v1',
-    models: ['abab6.5s', 'abab6.5', 'abab6'],
+    models: ['MiniMax-Text-01', 'abab6.5s', 'abab6.5', 'abab6'],
   },
   {
     id: 'custom',
