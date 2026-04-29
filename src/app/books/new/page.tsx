@@ -252,10 +252,15 @@ export default function NewBookPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!title.trim() || !userId) return
+    console.log('handleSubmit called', { title, userId, isLoading })
+    if (!title.trim() || !userId) {
+      console.log('early return: title=', title, 'userId=', userId)
+      return
+    }
     const filteredQuestions = coreQuestions.filter(q => q.trim() !== '')
     setIsLoading(true)
     const supabase = createClient()
+    console.log('Inserting book...')
     const { error } = await supabase.from('books').insert({
       user_id: userId,
       title: title.trim(),
@@ -268,8 +273,14 @@ export default function NewBookPage() {
       category_id: categoryId || null,
       status: 'to-read',
     })
+    console.log('Insert result, error=', error)
     setIsLoading(false)
-    if (!error) router.push('/dashboard')
+    if (!error) {
+      console.log('Success, redirecting...')
+      router.push('/dashboard')
+    } else {
+      console.log('Error occurred:', error)
+    }
   }
 
   // ============ STEP 1: Enter Title ============
