@@ -419,8 +419,8 @@ export default function NewBookPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <button
-              onClick={() => handleAIModeSelect('goal')}
-              className="p-6 rounded-xl border-2 border-purple-200 bg-purple-50 hover:border-purple-400 transition-colors text-left"
+              onClick={() => setSelectedAIMode('goal')}
+              className={`p-6 rounded-xl border-2 transition-colors text-left ${selectedAIMode === 'goal' ? 'border-purple-400 bg-purple-50' : 'border-purple-200 hover:border-purple-400'}`}
             >
               <div className="flex items-center gap-3 mb-3">
                 <MessageCircle className="w-6 h-6 text-purple-500" />
@@ -440,6 +440,26 @@ export default function NewBookPage() {
               <p className="text-sm text-gray-600">让 AI 直接分析推荐</p>
             </button>
           </div>
+
+          {/* Goal input for Mode A */}
+          {selectedAIMode === 'goal' && (
+            <div className="mb-6 space-y-3">
+              <Label>描述你的困惑或目标</Label>
+              <Textarea
+                placeholder="例如：我想学习投资理财，但不知道从何开始"
+                value={userGoal}
+                onChange={(e) => setUserGoal(e.target.value)}
+                rows={3}
+              />
+              <Button
+                onClick={() => handleAIModeSelect('goal')}
+                disabled={!userGoal.trim() || isAnalyzing}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+              >
+                {isAnalyzing ? 'AI 分析中...' : '确认并分析'}
+              </Button>
+            </div>
+          )}
 
           <Button variant="outline" onClick={handleSkipAI} className="w-full">
             跳过，直接创建
