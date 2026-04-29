@@ -12,8 +12,6 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { createClient } from '@/lib/supabase/client'
 
-const supabase = createClient()
-
 export default function NewBookPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
@@ -24,6 +22,7 @@ export default function NewBookPage() {
   const [coreQuestions, setCoreQuestions] = useState<string[]>([''])
 
   useEffect(() => {
+    const supabase = createClient()
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) setUserId(user.id)
       else router.push('/login')
@@ -35,6 +34,7 @@ export default function NewBookPage() {
     if (!title.trim() || !motivation.trim() || !userId) return
     const filteredQuestions = coreQuestions.filter(q => q.trim() !== '')
     setIsLoading(true)
+    const supabase = createClient()
     const { error } = await supabase.from('books').insert({
       user_id: userId,
       title: title.trim(),

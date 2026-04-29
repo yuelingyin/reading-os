@@ -32,11 +32,11 @@ export default async function BookDetailPage({ params }: { params: Promise<{ id:
         <Link href="/dashboard" className="inline-flex items-center text-sm text-gray-500 hover:text-black mb-4"><ArrowLeft className="w-4 h-4 mr-1" />返回首页</Link>
         <div className="flex items-start justify-between gap-4 mb-8">
           <div><h1 className="text-2xl font-bold">{book.title}</h1>{book.author && <p className="text-gray-500">{book.author}</p>}</div>
-          <Badge className={statusMap[book.status].className}>{statusMap[book.status].label}</Badge>
+          <Badge className={statusMap[book.status as BookStatus].className}>{statusMap[book.status as BookStatus].label}</Badge>
         </div>
         {book.core_questions?.length > 0 && (
           <Card className="mb-6 bg-gray-50"><CardHeader className="pb-3"><p className="text-xs text-gray-400 uppercase tracking-wide">核心诉求</p></CardHeader><CardContent className="pt-0">
-            <ul>{book.core_questions.map((q, i) => <li key={i} className="text-sm">Q{i+1}. {q}</li>)}</ul>
+            <ul>{book.core_questions.map((q: string, i: number) => <li key={i} className="text-sm">Q{i+1}. {q}</li>)}</ul>
           </CardContent></Card>
         )}
         <Separator className="my-6" />
@@ -50,12 +50,12 @@ export default async function BookDetailPage({ params }: { params: Promise<{ id:
                   {r.answers_core_questions ? <CheckCircle className="w-4 h-4 text-green-600" /> : <Circle className="w-4 h-4 text-gray-300" />}
                 </div>
               </CardHeader>
-              {r.key_points?.length > 0 && <CardContent><p className="text-xs text-gray-400 uppercase mb-1">核心知识点</p><ul>{r.key_points.map((p, i) => <li key={i} className="text-sm text-gray-700">· {p}</li>)}</ul></CardContent>}
+              {r.key_points && r.key_points.length > 0 && <CardContent><p className="text-xs text-gray-400 uppercase mb-1">核心知识点</p><ul>{r.key_points.map((p: string, i: number) => <li key={i} className="text-sm text-gray-700">· {p}</li>)}</ul></CardContent>}
               {r.reflection && <CardContent><p className="text-xs text-gray-400 uppercase mb-1">感想</p><p className="text-sm text-gray-600">{r.reflection}</p></CardContent>}
             </Card>
           ))}
         </div>
-        {actionItems?.length > 0 && (<><Separator className="my-6" /><div className="mb-6"><div className="flex items-center gap-2 mb-4"><CheckSquare className="w-5 h-5" /><h2 className="text-lg font-semibold">行动清单</h2></div><Card><CardContent className="pt-6"><ul className="space-y-3">{actionItems.map((item: ActionItem) => <li key={item.id} className="flex items-start gap-3"><Square className="w-5 h-5 text-gray-300 shrink-0 mt-0.5" /><div><p className="text-sm">{item.action_description}</p>{item.due_date && <p className="text-xs text-gray-400 mt-1">截止：{item.due_date}</p>}</div></li>)}</ul></CardContent></Card></div></>)}
+        {actionItems && actionItems.length > 0 && (<><Separator className="my-6" /><div className="mb-6"><div className="flex items-center gap-2 mb-4"><CheckSquare className="w-5 h-5" /><h2 className="text-lg font-semibold">行动清单</h2></div><Card><CardContent className="pt-6"><ul className="space-y-3">{actionItems.map((item: ActionItem) => <li key={item.id} className="flex items-start gap-3"><Square className="w-5 h-5 text-gray-300 shrink-0 mt-0.5" /><div><p className="text-sm">{item.action_description}</p>{item.due_date && <p className="text-xs text-gray-400 mt-1">截止：{item.due_date}</p>}</div></li>)}</ul></CardContent></Card></div></>)}
         <Separator className="my-6" />
         <div className="mb-24">
           <div className="flex items-center justify-between mb-4">
@@ -64,7 +64,7 @@ export default async function BookDetailPage({ params }: { params: Promise<{ id:
           </div>
           {!extendedReadings?.length ? <div className="text-center py-8 border border-dashed border-gray-200 rounded-lg"><p className="text-gray-400">暂无延伸记录</p></div> : extendedReadings.map((item: ExtendedReading) => (
             <Card key={item.id} className="mb-3"><CardContent className="pt-6">
-              {item.keywords?.length > 0 && <div className="flex flex-wrap gap-2 mb-2">{item.keywords.map((k, i) => <Badge key={i} variant="secondary">{k}</Badge>)}</div>}
+              {item.keywords && item.keywords.length > 0 && <div className="flex flex-wrap gap-2 mb-2">{item.keywords.map((k: string, i: number) => <Badge key={i} variant="secondary">{k}</Badge>)}</div>}
               {item.recommended_book_title && <div className="flex items-start gap-2"><BookText className="w-4 h-4 text-gray-400 mt-0.5" /><div><p className="text-sm font-medium">{item.recommended_book_title}</p>{item.recommended_book_author && <p className="text-xs text-gray-400">{item.recommended_book_author}</p>}</div></div>}
             </CardContent></Card>
           ))}

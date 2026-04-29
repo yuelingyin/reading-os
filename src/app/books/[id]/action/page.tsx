@@ -12,8 +12,6 @@ import { Separator } from '@/components/ui/separator'
 import { createClient } from '@/lib/supabase/client'
 import type { Book } from '@/types'
 
-const supabase = createClient()
-
 export default function ActionPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
   const [bookId, setBookId] = useState<string | null>(null)
@@ -24,6 +22,7 @@ export default function ActionPage({ params }: { params: Promise<{ id: string }>
   const [dueDate, setDueDate] = useState('')
 
   useEffect(() => {
+    const supabase = createClient()
     Promise.all([supabase.auth.getUser(), params.then(p => p.id)]).then(([{ data: { user } }, id]) => {
       if (!user) { router.push('/login'); return }
       setUserId(user.id)
@@ -35,6 +34,7 @@ export default function ActionPage({ params }: { params: Promise<{ id: string }>
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!bookId || !userId || !actionDescription.trim()) return
+    const supabase = createClient()
     setIsLoading(true)
     await supabase.from('action_items').insert({ user_id: userId, book_id: bookId, action_description: actionDescription.trim(), due_date: dueDate || null })
     await supabase.from('books').update({ status: 'completed' }).eq('id', bookId).eq('user_id', userId)

@@ -13,8 +13,6 @@ import { Separator } from '@/components/ui/separator'
 import { createClient } from '@/lib/supabase/client'
 import type { Book } from '@/types'
 
-const supabase = createClient()
-
 export default function ChapterReviewPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
   const [bookId, setBookId] = useState<string | null>(null)
@@ -28,6 +26,7 @@ export default function ChapterReviewPage({ params }: { params: Promise<{ id: st
   const [reflection, setReflection] = useState('')
 
   useEffect(() => {
+    const supabase = createClient()
     Promise.all([supabase.auth.getUser(), params.then(p => p.id)]).then(([{ data: { user } }, id]) => {
       if (!user) { router.push('/login'); return }
       setUserId(user.id)
@@ -40,6 +39,7 @@ export default function ChapterReviewPage({ params }: { params: Promise<{ id: st
     e.preventDefault()
     if (!bookId || !userId || !chapterNumber) return
     const filteredKeyPoints = keyPoints.filter(p => p.trim() !== '')
+    const supabase = createClient()
     setIsLoading(true)
     await supabase.from('chapter_reviews').insert({
       user_id: userId, book_id: bookId, chapter_number: chapterNumber,

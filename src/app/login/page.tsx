@@ -9,8 +9,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
 
-const supabase = createClient()
-
 export default function LoginPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
@@ -23,6 +21,7 @@ export default function LoginPage() {
     e.preventDefault()
     setIsLoading(true)
     setError('')
+    const supabase = createClient()
     if (isSignUp) {
       const { error } = await supabase.auth.signUp({ email, password })
       if (error) { setError(error.message); setIsLoading(false); return }

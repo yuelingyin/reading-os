@@ -11,8 +11,6 @@ import { Separator } from '@/components/ui/separator'
 import { createClient } from '@/lib/supabase/client'
 import type { Book } from '@/types'
 
-const supabase = createClient()
-
 export default function ExtendPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
   const [bookId, setBookId] = useState<string | null>(null)
@@ -24,6 +22,7 @@ export default function ExtendPage({ params }: { params: Promise<{ id: string }>
   const [recommendedAuthor, setRecommendedAuthor] = useState('')
 
   useEffect(() => {
+    const supabase = createClient()
     Promise.all([supabase.auth.getUser(), params.then(p => p.id)]).then(([{ data: { user } }, id]) => {
       if (!user) { router.push('/login'); return }
       setUserId(user.id)
@@ -36,6 +35,7 @@ export default function ExtendPage({ params }: { params: Promise<{ id: string }>
     e.preventDefault()
     if (!bookId || !userId) return
     const keywordArray = keywords.split(',').map(k => k.trim()).filter(k => k !== '')
+    const supabase = createClient()
     setIsLoading(true)
     await supabase.from('extended_reading').insert({
       user_id: userId, book_id: bookId,
