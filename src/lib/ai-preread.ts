@@ -27,7 +27,7 @@ async function getAIConfig() {
     }
   } catch {}
 
-  // Fallback to localStorage (for users who can't save to Supabase)
+  // Fallback to localStorage
   if (typeof window !== 'undefined') {
     const stored = localStorage.getItem('reading-os-settings')
     if (stored) {
@@ -65,8 +65,28 @@ export async function getAIRecommendation(
       baseURL: config.baseUrl,
     })
 
-    const prompt = userGoal
-      ? `用户的目标/困惑是："${userGoal}"
+    let prompt: string
+    let responseFormat: { type: 'json_object' } | undefined = { type: 'json_object' }
+
+    // Special mode: FIND_BOOK_OPTIONS
+    if (userGoal === 'FIND_BOOK_OPTIONS') {
+      prompt = `用户输入了书名："${bookTitle}"
+
+请根据这个书名，返回最匹配的书籍信息。可能是：
+1. 完全匹配的书
+2. 类似书名的其他书籍
+3. 如果书名不完整，补充完整
+
+返回 JSON 格式：
+{
+  "core_questions": [],
+  "suggested_genre": "self-improvement",
+  "reading_suggestion": "根据书名推测的书籍信息，例如：《书名》- 作者名",
+  "target_audience": "可能的作者列表，用顿号分隔，例如：张三名、李四名"
+}`
+    } else if (userGoal) {
+      // Goal-based analysis
+      prompt = `用户的目标/困惑是："${userGoal}"
 
 请分析书籍《${bookTitle}》${author ? `（作者：${author}）` : ''}，判断它是否能帮助用户达成目标。
 
@@ -77,7 +97,9 @@ export async function getAIRecommendation(
   "reading_suggestion": "简短的建议，说明这本书适合什么样的读者",
   "target_audience": "这本书的目标读者是谁"
 }`
-      : `请分析书籍《${bookTitle}》${author ? `（作者：${author}）` : ''}
+    } else {
+      // Direct analysis
+      prompt = `请分析书籍《${bookTitle}》${author ? `（作者：${author}）` : ''}
 
 返回一个全面的阅读推荐分析，包括：
 1. 这本书最值得探索的1-3个核心问题
@@ -91,17 +113,18 @@ export async function getAIRecommendation(
   "reading_suggestion": "一句话说明这本书的价值和适合人群",
   "target_audience": "谁最应该读这本书"
 }`
+    }
 
     const response = await openai.chat.completions.create({
       model: config.model,
       messages: [
         {
           role: 'system',
-          content: '你是一位资深阅读顾问，擅长帮助用户找到适合自己的书籍并制定阅读目标。始终返回有效的 JSON。',
+          content: '你是一位资深阅读顾问，擅长帮助用户找到适合自己的书籍。始终返回有效的 JSON。',
         },
         { role: 'user', content: prompt },
       ],
-      response_format: { type: 'json_object' },
+      response_format: responseFormat,
       temperature: 0.7,
     })
 

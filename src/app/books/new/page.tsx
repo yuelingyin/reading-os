@@ -2,14 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { BookOpen, Plus, X, Search, Loader2, Sparkles, ArrowRight, Check, MessageCircle, Zap, BookMarked, RefreshCw } from 'lucide-react'
+import { BookOpen, Loader2, Sparkles, ArrowRight, Check, MessageCircle, Zap, BookMarked } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import { createClient } from '@/lib/supabase/client'
 import { analyzeBookForUser } from '@/lib/book-actions'
 import { APIConfigBanner } from '@/components/api-config-banner'
@@ -21,7 +19,6 @@ type Step = 'title' | 'confirm' | 'ai-mode' | 'ai-analyzing' | 'finalize'
 interface BookOption {
   title: string
   author: string
-  coverUrl?: string
   description?: string
 }
 
@@ -75,26 +72,65 @@ export default function NewBookPage() {
     setBookOptions([])
 
     try {
-      const response = await fetch('/api/books/find', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title.trim() }),
-      })
+      // Call AI to find matching books by title
+      const result = await analyzeBookForUser(title.trim(), undefined, 'FIND_BOOK_OPTIONS')
 
-      const data = await response.json()
+      if (result.success && result.recommendation) {
+        // AI returns options in core_questions or reading_suggestion
+        // Parse AI response to get book options
+        const suggestion = result.recommendation.reading_suggestion || ''
+        const targetAudience = result.recommendation.target_audience || ''
 
-      if (data.options && data.options.length > 0) {
-        setBookOptions(data.options)
+        // Try to parse AI response for book options
+        const options: BookOption[] = []
+
+        // Check if suggestion contains book info
+        if (suggestion.includes('《')) {
+          const matches = suggestion.match(/《([^》]+)》[^《]*?(?:作者[：:]\s*([^\n，,。]+))?/g)
+          if (matches) {
+            matches.forEach(m => {
+              const titleMatch = m.match(/《([^》]+)》/)
+              const authorMatch = m.match(/作者[：:]\s*([^\n，,。]+)/)
+              if (titleMatch) {
+                options.push({
+                  title: titleMatch[1],
+                  author: authorMatch ? authorMatch[1].trim() : '作者未知',
+                  description: m.slice(0, 100),
+                })
+              }
+            })
+          }
+        }
+
+        // Fallback: if no options parsed, use target_audience
+        if (options.length === 0 && targetAudience) {
+          options.push({
+            title: title.trim(),
+            author: targetAudience.split('、')[0] || '作者未知',
+            description: targetAudience,
+          })
+        }
+
+        // Final fallback
+        if (options.length === 0) {
+          options.push({
+            title: title.trim(),
+            author: '作者未知，请确认',
+            description: '请从以下选项中选择，或手动修改',
+          })
+        }
+
+        setBookOptions(options)
+        setStep('confirm')
       } else {
-        // No results found - use title as-is
+        setSearchError(result.error || '无法找到匹配的书籍')
         setBookOptions([{
           title: title.trim(),
           author: '',
-          coverUrl: '',
-          description: '未找到匹配结果，请确认书名或手动输入作者',
+          description: result.error || '请手动确认书名和作者',
         }])
+        setStep('confirm')
       }
-      setStep('confirm')
     } catch (e: any) {
       setSearchError(e.message || '搜索失败')
       setBookOptions([{
@@ -110,11 +146,13 @@ export default function NewBookPage() {
   const selectBookOption = (option: BookOption) => {
     setTitle(option.title)
     setAuthor(option.author)
-    setCoverUrl(option.coverUrl || '')
+    setCoverUrl('')
     setStep('ai-mode')
   }
 
   const handleManualConfirm = () => {
+    if (!title.trim()) return
+    setBookOptions([{ title: title.trim(), author: author || '' }])
     setStep('ai-mode')
   }
 
@@ -128,11 +166,13 @@ export default function NewBookPage() {
     if (!title.trim()) return
     setIsAnalyzing(true)
     setAiRecommendation(null)
+
     const result = await analyzeBookForUser(
       title,
       author || undefined,
       mode === 'goal' ? userGoal : undefined
     )
+
     if (result.success && result.recommendation) {
       setAiRecommendation(result.recommendation)
       if (result.recommendation.core_questions.length > 0) {
@@ -215,22 +255,19 @@ export default function NewBookPage() {
             {isSearching ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                搜索确认中...
+                AI 确认中...
               </>
             ) : (
               <>
-                <Search className="w-4 h-4 mr-2" />
-                搜索并确认
+                <Sparkles className="w-4 h-4 mr-2" />
+                AI 确认书名和作者
               </>
             )}
           </Button>
 
           <div className="mt-4 text-center">
             <button
-              onClick={() => {
-                setBookOptions([{ title: title.trim() || '', author: '', description: '' }])
-                setStep('confirm')
-              }}
+              onClick={handleManualConfirm}
               className="text-sm text-gray-500 hover:text-black"
             >
               跳过，直接手动输入
@@ -255,7 +292,7 @@ export default function NewBookPage() {
             <h1 className="text-2xl font-bold tracking-tight">确认书籍信息</h1>
           </div>
 
-          {bookOptions.length > 0 ? (
+          {bookOptions.length > 0 && (
             <div className="space-y-3 mb-6">
               <p className="text-gray-600">请确认是否是以下书籍：</p>
               {bookOptions.map((option, i) => (
@@ -264,32 +301,14 @@ export default function NewBookPage() {
                   onClick={() => selectBookOption(option)}
                   className="w-full p-4 rounded-lg border-2 border-gray-200 hover:border-green-400 transition-colors text-left"
                 >
-                  <div className="flex gap-3">
-                    {option.coverUrl ? (
-                      <img src={option.coverUrl} alt="" className="w-12 h-16 object-cover rounded" />
-                    ) : (
-                      <div className="w-12 h-16 bg-gray-100 rounded flex items-center justify-center">
-                        <BookOpen className="w-5 h-5 text-gray-400" />
-                      </div>
-                    )}
-                    <div>
-                      <p className="font-semibold text-lg">{option.title}</p>
-                      <p className="text-gray-500">{option.author || '作者未知'}</p>
-                      {option.description && (
-                        <p className="text-xs text-gray-400 mt-1">{option.description}</p>
-                      )}
-                    </div>
-                  </div>
+                  <p className="font-semibold text-lg">{option.title}</p>
+                  <p className="text-gray-500">{option.author || '作者未知'}</p>
+                  {option.description && (
+                    <p className="text-xs text-gray-400 mt-1">{option.description}</p>
+                  )}
                 </button>
               ))}
             </div>
-          ) : (
-            <Card className="mb-6">
-              <CardContent className="pt-4">
-                <p className="font-medium">{title}</p>
-                <p className="text-sm text-gray-500">{author || '作者未知'}</p>
-              </CardContent>
-            </Card>
           )}
 
           {/* Manual edit */}
@@ -364,17 +383,6 @@ export default function NewBookPage() {
               <p className="text-sm text-gray-600">让 AI 直接分析推荐</p>
             </button>
           </div>
-
-          {selectedAIMode === 'goal' && (
-            <div className="mb-6">
-              <Textarea
-                placeholder="描述你当前的问题或目标，例如：我想学习投资理财"
-                value={userGoal}
-                onChange={(e) => setUserGoal(e.target.value)}
-                rows={2}
-              />
-            </div>
-          )}
 
           <Button variant="outline" onClick={handleSkipAI} className="w-full">
             跳过，直接创建
@@ -463,18 +471,6 @@ export default function NewBookPage() {
                 </button>
               ))}
             </div>
-          </div>
-
-          {/* Motivation */}
-          <div className="space-y-2">
-            <Label htmlFor="motivation">读书动机（可选）</Label>
-            <Textarea
-              id="motivation"
-              placeholder="为什么想读这本书？"
-              value={motivation}
-              onChange={(e) => setMotivation(e.target.value)}
-              rows={2}
-            />
           </div>
 
           <Button type="submit" disabled={isLoading || !title.trim()} className="w-full bg-black text-white hover:bg-gray-800">
