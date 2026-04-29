@@ -108,14 +108,17 @@ export async function POST(request: NextRequest) {
 }`
     }
 
+    // Use gpt-4o-mini for speed - it's much faster and cheaper
+    const model = config.model?.includes('mini') ? config.model : 'gpt-4o-mini'
+
     const response = await openai.chat.completions.create({
-      model: config.model || 'gpt-4o-mini',
+      model: model,
       messages: [
-        { role: 'system', content: '你是一位资深阅读顾问。非常重要：你只能返回纯JSON格式，不要在JSON前后添加任何其他内容，不要使用思考标签，不要使用markdown格式。输出格式：{"core_questions":[],"suggested_genre":"...","reading_suggestion":"...","target_audience":"..."}' },
+        { role: 'system', content: '你是阅读顾问，返回JSON格式数据，不要思考标签，不要markdown。格式：{"options":[],"reading_suggestion":"","target_audience":""}' },
         { role: 'user', content: prompt },
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.3,
+      max_tokens: 500,
     })
 
     let content = response.choices[0].message.content || '{}'
