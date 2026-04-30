@@ -276,12 +276,6 @@ export default function NewBookPage() {
     const insertPromise = supabase.from('books').insert({
       user_id: userId,
       title: title.trim(),
-      author: author.trim() || null,
-      cover_url: coverUrl || null,
-      reading_mode: readingMode,
-      reading_motivation: motivation.trim() || null,
-      core_questions: filteredQuestions.length > 0 ? filteredQuestions : null,
-      category_id: categoryId || null,
       status: 'to-read',
     })
 
