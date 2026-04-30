@@ -256,47 +256,42 @@ export default function NewBookPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log('handleSubmit called', { title, userId, isLoading })
-    if (!title.trim() || !userId) {
-      console.log('early return: title=', title, 'userId=', userId)
-      alert('标题或用户信息不完整')
+    console.log('handleSubmit called', { title, isLoading })
+    if (!title.trim()) {
+      alert('标题不能为空')
       return
     }
-    const filteredQuestions = coreQuestions.filter(q => q.trim() !== '')
     setIsLoading(true)
-    console.log('Creating Supabase client...')
-    const supabase = createClient()
-    console.log('Inserting book with:', { user_id: userId, title: title.trim() })
 
-    // Add timeout
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('请求超时，请检查网络连接')), 15000)
-    )
-
-    const insertPromise = supabase.from('books').insert({
-      user_id: userId,
-      title: title.trim(),
-      status: 'to-read',
-    })
-
-    let insertResult
     try {
-      insertResult = await Promise.race([insertPromise, timeoutPromise])
-    } catch (err: any) {
-      console.error('Insert error:', err)
-      alert(err.message || '插入失败')
-      setIsLoading(false)
-      return
-    }
+      console.log('Calling API to create book...')
+      const response = await fetch('/api/books/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: title.trim(),
+          author: author,
+          coverUrl: coverUrl,
+          readingMode: readingMode,
+          readingMotivation: motivation,
+          coreQuestions: coreQuestions,
+          categoryId: categoryId,
+        }),
+      })
 
-    const { error } = insertResult as { error: any }
-    console.log('Insert result, error=', error)
-    setIsLoading(false)
-    if (!error) {
-      console.log('Success, redirecting...')
-      router.push('/dashboard')
-    } else {
-      alert('创建失败: ' + (error.message || '未知错误'))
+      const result = await response.json()
+      console.log('API result:', result)
+
+      if (result.success) {
+        router.push('/dashboard')
+      } else {
+        alert(result.error || '创建失败')
+      }
+    } catch (err: any) {
+      console.error('Submit error:', err)
+      alert(err.message || '网络错误')
+    } finally {
+      setIsLoading(false)
     }
   }
 
