@@ -34,27 +34,30 @@ export default function BookDetailPage({ params }: { params: Promise<{ id: strin
   const [isAdvancing, setIsAdvancing] = useState(false)
 
   useEffect(() => {
-    Promise.all([createClient().auth.getUser(), (params as any).id]).then(async ([{ data: { user } }, id]) => {
-      if (!user) { redirect('/login'); return }
-      setUserId(user.id)
-      setBookId(id)
+    params.then(({ id }: { id: string }) => {
+      createClient().auth.getUser().then(({ data: { user } }) => {
+        if (!user) { redirect('/login'); return }
+        setUserId(user.id)
+        setBookId(id)
 
-      const supabase = createClient()
-      const { data: bookData } = await supabase.from('books').select('*').eq('id', id).eq('user_id', user.id).single()
-      if (!bookData) { notFound(); return }
-      setBook(bookData as Book)
+        const supabase = createClient()
+        supabase.from('books').select('id, title, author, cover_url, status, reading_mode, book_genre, current_chapter, reading_motivation, core_questions, category_id, categories(*)').eq('id', id).eq('user_id', user.id).single().then(({ data }) => {
+          if (!data) { notFound(); return }
+          setBook(data as any)
 
-      const [reviewsRes, actionsRes, extendedRes] = await Promise.all([
-        supabase.from('chapter_reviews').select('*').eq('book_id', id).eq('user_id', user.id).order('chapter_number', { ascending: true }),
-        supabase.from('action_items').select('*').eq('book_id', id).eq('user_id', user.id).order('created_at', { ascending: true }),
-        supabase.from('extended_reading').select('*').eq('book_id', id).eq('user_id', user.id).order('created_at', { ascending: true }),
-      ])
-
-      setReviews(reviewsRes.data || [])
-      setActionItems(actionsRes.data || [])
-      setExtendedReadings(extendedRes.data || [])
+          Promise.all([
+            supabase.from('chapter_reviews').select('id, book_id, chapter_number, chapter_title, key_points, reflection, answers_core_questions').eq('book_id', id).eq('user_id', user.id).order('chapter_number', { ascending: true }),
+            supabase.from('action_items').select('id, book_id, action_description, due_date, status').eq('book_id', id).eq('user_id', user.id).order('created_at', { ascending: true }),
+            supabase.from('extended_reading').select('id, book_id, keywords, recommended_book_title, recommended_book_author').eq('book_id', id).eq('user_id', user.id).order('created_at', { ascending: true }),
+          ]).then(([reviewsRes, actionsRes, extendedRes]) => {
+            setReviews((reviewsRes.data || []) as any[])
+            setActionItems((actionsRes.data || []) as any[])
+            setExtendedReadings((extendedRes.data || []) as any[])
+          })
+        })
+      })
     })
-  }, [params])
+  }, [])
 
   const handleAdvanceChapter = async (reflection: string) => {
     if (!bookId) throw new Error('No book ID')
@@ -82,8 +85,8 @@ export default function BookDetailPage({ params }: { params: Promise<{ id: strin
     await advanceChapter(bookId, '粗读推进')
     // Refresh
     const supabase = createClient()
-    const { data } = await supabase.from('books').select('*').eq('id', bookId).single()
-    if (data) setBook(data as Book)
+    const { data } = await supabase.from('books').select('id, title, author, cover_url, status, reading_mode, book_genre, current_chapter, reading_motivation, core_questions, category_id').eq('id', bookId).single()
+    if (data) setBook(data as any)
     setIsAdvancing(false)
   }
 
