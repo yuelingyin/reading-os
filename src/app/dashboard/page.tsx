@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { createClient, getUser } from '@/lib/supabase/server'
 import { ExportButtons } from '@/components/export-buttons'
+import { DeleteBookButton } from '@/components/delete-book-button'
 import type { Book, BookStatus, Category } from '@/types'
 
 const statusMap: Record<BookStatus, { label: string; className: string }> = {
@@ -166,7 +167,10 @@ export default async function DashboardPage() {
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <h2 className="text-lg font-semibold truncate">{book.title}</h2>
+                      <div className="flex items-center justify-between">
+                        <h2 className="text-lg font-semibold truncate">{book.title}</h2>
+                        <DeleteBookButton bookId={book.id} />
+                      </div>
                       {book.author && <p className="text-sm text-gray-500 truncate">{book.author}</p>}
                       <div className="flex items-center gap-2 mt-1">
                         <Badge className={statusMap[book.status as BookStatus]?.className || ''}>{statusMap[book.status as BookStatus]?.label || book.status}</Badge>
