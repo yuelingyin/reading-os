@@ -44,6 +44,10 @@ export default function NewBookPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [aiRecommendation, setAiRecommendation] = useState<AIRecommendation | null>(null)
 
+  // EPUB file upload
+  const [epubFile, setEpubFile] = useState<File | null>(null)
+  const [isParsingEpub, setIsParsingEpub] = useState(false)
+
   // Form state
   const [readingMode, setReadingMode] = useState<ReadingMode>('skim')
   const [bookGenre, setBookGenre] = useState<BookGenre | ''>('')
@@ -259,7 +263,7 @@ export default function NewBookPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log('handleSubmit called', { title, isLoading })
+    console.log('handleSubmit called', { title, isLoading, hasEpub: !!epubFile })
     if (!title.trim()) {
       alert('标题不能为空')
       return
@@ -268,18 +272,30 @@ export default function NewBookPage() {
 
     try {
       console.log('Calling API to create book...')
+
+      // Prepare body with optional EPUB file
+      const body: Record<string, any> = {
+        title: title.trim(),
+        author: author,
+        coverUrl: coverUrl,
+        readingMode: readingMode,
+        readingMotivation: motivation,
+        coreQuestions: coreQuestions,
+        categoryId: categoryId,
+      }
+
+      // If EPUB file selected, convert to base64 and include
+      if (epubFile) {
+        setIsParsingEpub(true)
+        const arrayBuffer = await epubFile.arrayBuffer()
+        body.epubBase64 = Buffer.from(arrayBuffer).toString('base64')
+        body.epubFileName = epubFile.name
+      }
+
       const response = await fetch('/api/books/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: title.trim(),
-          author: author,
-          coverUrl: coverUrl,
-          readingMode: readingMode,
-          readingMotivation: motivation,
-          coreQuestions: coreQuestions,
-          categoryId: categoryId,
-        }),
+        body: JSON.stringify(body),
       })
 
       const result = await response.json()
@@ -295,6 +311,7 @@ export default function NewBookPage() {
       alert(err.message || '网络错误')
     } finally {
       setIsLoading(false)
+      setIsParsingEpub(false)
     }
   }
 
@@ -538,6 +555,32 @@ export default function NewBookPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* EPUB Upload Section */}
+        <Card className="mb-6 bg-purple-50 border-purple-200">
+          <CardContent className="pt-4">
+            <Label className="text-purple-700 font-medium">上传书籍源文件（可选）</Label>
+            <p className="text-xs text-gray-500 mb-3">上传 EPUB 文件后，AI 将基于原文进行提问和判卷</p>
+            <div className="flex items-center gap-3">
+              <input
+                type="file"
+                accept=".epub"
+                onChange={(e) => setEpubFile(e.target.files?.[0] || null)}
+                className="hidden"
+                id="epub-upload"
+              />
+              <label
+                htmlFor="epub-upload"
+                className="cursor-pointer px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm"
+              >
+                {epubFile ? epubFile.name : '选择 EPUB 文件'}
+              </label>
+              {epubFile && (
+                <span className="text-sm text-gray-600">{epubFile.name}</span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         <form onSubmit={(e) => { e.preventDefault(); handleSubmit(e); }} className="space-y-6">
           {/* Reading Mode */}
