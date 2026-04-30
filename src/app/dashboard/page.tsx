@@ -1,11 +1,12 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { BookOpen, Plus, Target, CheckCircle, Flame, TrendingUp, Download } from 'lucide-react'
+import { BookOpen, Plus, Target, CheckCircle, Flame, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { createClient, getUser } from '@/lib/supabase/server'
+import { ExportButtons } from '@/components/export-buttons'
 import type { Book, BookStatus, Category } from '@/types'
 
 const statusMap: Record<BookStatus, { label: string; className: string }> = {
@@ -75,12 +76,7 @@ export default async function DashboardPage() {
             <h1 className="text-2xl font-bold tracking-tight">Reading OS</h1>
           </div>
           <div className="flex items-center gap-2">
-            <a href="/api/export?type=books">
-              <Button variant="outline" size="sm"><Download className="w-4 h-4 mr-1" />导出书单</Button>
-            </a>
-            <a href="/api/export?type=actions">
-              <Button variant="outline" size="sm"><Download className="w-4 h-4 mr-1" />导出行动</Button>
-            </a>
+            <ExportButtons />
             <Link href="/books/new">
               <Button className="bg-black text-white hover:bg-gray-800"><Plus className="w-4 h-4 mr-2" />发起新阅读</Button>
             </Link>

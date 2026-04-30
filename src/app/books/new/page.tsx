@@ -182,7 +182,10 @@ export default function NewBookPage() {
   }
 
   const handleManualConfirm = () => {
-    if (!title.trim()) return
+    if (!title.trim()) {
+      alert('请先输入书名')
+      return
+    }
     setBookOptions([{ title: title.trim(), author: author || '' }])
     setStep('ai-mode')
   }
