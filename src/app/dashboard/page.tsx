@@ -21,9 +21,9 @@ export default async function DashboardPage() {
   if (!user) redirect('/login')
   const supabase = await createClient()
 
-  // Fetch all data in parallel
+  // Fetch all data in parallel - only select columns we actually use
   const [{ data: books }, { data: categories }, { data: actionItems }, { data: reviews }] = await Promise.all([
-    supabase.from('books').select('*, categories(*)').eq('user_id', user.id).order('created_at', { ascending: false }),
+    supabase.from('books').select('id, title, author, cover_url, status, core_questions, updated_at, categories(*)').eq('user_id', user.id).order('created_at', { ascending: false }),
     supabase.from('categories').select('*').eq('user_id', user.id).order('name'),
     supabase.from('action_items').select('*').eq('user_id', user.id),
     supabase.from('chapter_reviews').select('created_at').eq('user_id', user.id).order('created_at', { ascending: false }),
@@ -154,7 +154,7 @@ export default async function DashboardPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {books.map((book: Book) => (
+            {(books as any[])?.map((book) => (
               <Card key={book.id} className="hover:shadow-md transition-shadow">
                 <CardHeader className="pb-3">
                   <div className="flex gap-3">
@@ -169,14 +169,14 @@ export default async function DashboardPage() {
                       <h2 className="text-lg font-semibold truncate">{book.title}</h2>
                       {book.author && <p className="text-sm text-gray-500 truncate">{book.author}</p>}
                       <div className="flex items-center gap-2 mt-1">
-                        <Badge className={statusMap[book.status].className}>{statusMap[book.status].label}</Badge>
+                        <Badge className={statusMap[book.status as BookStatus]?.className || ''}>{statusMap[book.status as BookStatus]?.label || book.status}</Badge>
                         {book.categories && <Badge variant="outline">{book.categories.name}</Badge>}
                       </div>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {book.core_questions?.slice(0, 2).map((q, i) => (
+                  {book.core_questions?.slice(0, 2).map((q: string, i: number) => (
                     <p key={i} className="text-sm text-gray-700 truncate">Q{i+1}. {q}</p>
                   ))}
                 </CardContent>
